@@ -524,7 +524,8 @@ pub fn get_sgx_tdx_fmspc_tcbstatus_v3(
             if sgxtcbcomponents_ok && pcesvn_ok {
                 sgx_tcb_status = TcbStatus::from_str(tcb_level.tcb_status.as_str());
             }
-        } else {
+        } 
+        if sgx_tcb_status != TcbStatus::TcbUnrecognized {
             if !is_empty(tee_tcb_svn) {
                 let tdxtcbcomponents_ok = match tcb_level.tcb.tdxtcbcomponents.as_ref() {
                     Some(tdxtcbcomponents) => tdxtcbcomponents
