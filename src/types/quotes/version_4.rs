@@ -1,6 +1,7 @@
 use super::{CertData, QuoteHeader, body::*};
 use crate::constants::{ENCLAVE_REPORT_LEN, SGX_TEE_TYPE, TD10_REPORT_LEN, TDX_TEE_TYPE};
 
+#[derive(Clone, Debug)]
 pub struct QuoteV4 {
     pub header: QuoteHeader,            // [48 bytes]
                                         // Header of Quote data structure.
