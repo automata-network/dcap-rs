@@ -61,6 +61,12 @@ pub fn verify_quote_dcapv4(
 
     let (sgx_tcb_status, tdx_tcb_status) =
         get_sgx_tdx_fmspc_tcbstatus_v3(&sgx_extensions, &tee_tcb_svn, &tcb_info_v3);
+    
+    assert!(
+        sgx_tcb_status != TcbStatus::TcbRevoked || tdx_tcb_status != TcbStatus::TcbRevoked,
+        "FMSPC TCB Revoked"
+    );
+    
     let mut tcb_status: TcbStatus;
     if quote.header.tee_type == SGX_TEE_TYPE {
         tcb_status = sgx_tcb_status;
@@ -70,6 +76,11 @@ pub fn verify_quote_dcapv4(
         // Fetch TDXModule TCB and TDXModule Identity
         let (tdx_module_tcb_status, tdx_module_mrsigner, tdx_module_attributes) =
             get_tdx_module_identity_and_tcb(&tee_tcb_svn, &tcb_info_v3);
+
+        assert!(
+            tdx_module_tcb_status != TcbStatus::TcbRevoked,
+            "TDX Module TCB Revoked"
+        );
 
         // check TDX module
         let (tdx_report_mrsigner, tdx_report_attributes) = if let Some(tdx_body) = quote_tdx_body {

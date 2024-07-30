@@ -455,7 +455,10 @@ pub fn extract_sgx_extension<'a>(cert: &'a X509Certificate<'a>) -> SgxExtensions
     }
 }
 
-pub fn get_sgx_fmspc_tcbstatus_v2(sgx_extensions: &SgxExtensions, tcb_info_root: &TcbInfoV2) -> TcbStatus {
+pub fn get_sgx_fmspc_tcbstatus_v2(
+    sgx_extensions: &SgxExtensions,
+    tcb_info_root: &TcbInfoV2,
+) -> TcbStatus {
     // we'll make sure the tcbinforoot is valid
     // check that fmspc is valid
     // check that pceid is valid
@@ -501,7 +504,7 @@ pub fn get_sgx_fmspc_tcbstatus_v2(sgx_extensions: &SgxExtensions, tcb_info_root:
 pub fn get_sgx_tdx_fmspc_tcbstatus_v3(
     sgx_extensions: &SgxExtensions,
     tee_tcb_svn: &[u8; 16],
-    tcbinfov3: &TcbInfoV3
+    tcbinfov3: &TcbInfoV3,
 ) -> (TcbStatus, TcbStatus) {
     // we'll make sure the tcbinforoot is valid
     // check that fmspc is valid
@@ -524,8 +527,8 @@ pub fn get_sgx_tdx_fmspc_tcbstatus_v3(
             if sgxtcbcomponents_ok && pcesvn_ok {
                 sgx_tcb_status = TcbStatus::from_str(tcb_level.tcb_status.as_str());
             }
-        } 
-        if sgx_tcb_status != TcbStatus::TcbUnrecognized {
+        }
+        if sgx_tcb_status != TcbStatus::TcbUnrecognized || sgx_tcb_status != TcbStatus::TcbRevoked {
             if !is_empty(tee_tcb_svn) {
                 let tdxtcbcomponents_ok = match tcb_level.tcb.tdxtcbcomponents.as_ref() {
                     Some(tdxtcbcomponents) => tdxtcbcomponents

@@ -288,10 +288,7 @@ fn converge_tcb_status_with_qe_tcb(tcb_status: TcbStatus, qe_tcb_status: TcbStat
             } else {
                 converged_tcb_status = tcb_status;
             }
-        }
-        TcbStatus::TcbRevoked => {
-            converged_tcb_status = TcbStatus::TcbRevoked;
-        }
+        },
         _ => {
             converged_tcb_status = tcb_status;
         }
