@@ -16,6 +16,6 @@ serde_json   = "1.0"
 chrono       = "0.4"
 time         = "0.3.36"
 
-p256         = { git = "ssh://git@github.com/automata-network/RustCrypto-elliptic-curves.git" }
+p256         = { git = "https://github.com/automata-network/RustCrypto-elliptic-curves.git" }
 sha2         = { git = "https://github.com/RustCrypto/hashes.git" }
 sha3         = { git = "https://github.com/RustCrypto/hashes.git" }

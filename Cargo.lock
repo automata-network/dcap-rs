@@ -515,7 +515,7 @@ checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 [[package]]
 name = "p256"
 version = "0.13.2"
-source = "git+ssh://git@github.com/automata-network/RustCrypto-elliptic-curves.git#7b5e55238d143f5ce39a699d682c16e9319076cb"
+source = "git+https://github.com/automata-network/RustCrypto-elliptic-curves.git#3ae63bd91f4cbac73873a659be84c42a2da4792d"
 dependencies = [
  "cfg-if",
  "ecdsa",
@@ -553,7 +553,7 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 [[package]]
 name = "primeorder"
 version = "0.13.6"
-source = "git+ssh://git@github.com/automata-network/RustCrypto-elliptic-curves.git#7b5e55238d143f5ce39a699d682c16e9319076cb"
+source = "git+https://github.com/automata-network/RustCrypto-elliptic-curves.git#3ae63bd91f4cbac73873a659be84c42a2da4792d"
 dependencies = [
  "elliptic-curve",
 ]
