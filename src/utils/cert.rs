@@ -4,6 +4,7 @@ use x509_parser::oid_registry::asn1_rs::{
 use x509_parser::oid_registry::OID_X509_EXT_CRL_DISTRIBUTION_POINTS;
 use x509_parser::prelude::*;
 
+use crate::constants::{SGX_TEE_TYPE, TDX_TEE_TYPE};
 use crate::types::cert::{PckPlatformConfiguration, SgxExtensionTcbLevel, SgxExtensions};
 use crate::types::tcbinfo::{TcbComponent, TcbInfoV2, TcbInfoV3};
 use crate::types::TcbStatus;
@@ -500,12 +501,13 @@ pub fn get_sgx_fmspc_tcbstatus_v2(
     unreachable!();
 }
 
-// https://github.com/intel/SGX-TDX-DCAP-QuoteVerificationLibrary/blob/7e5b2a13ca5472de8d97dd7d7024c2ea5af9a6ba/Src/AttestationLibrary/src/Verifiers/Checks/TcbLevelCheck.cpp#L129-L181
+// Slightly modified from https://github.com/intel/SGX-TDX-DCAP-QuoteVerificationLibrary/blob/7e5b2a13ca5472de8d97dd7d7024c2ea5af9a6ba/Src/AttestationLibrary/src/Verifiers/Checks/TcbLevelCheck.cpp#L129-L181
 pub fn get_sgx_tdx_fmspc_tcbstatus_v3(
+    tee_type: u32,
     sgx_extensions: &SgxExtensions,
     tee_tcb_svn: &[u8; 16],
     tcbinfov3: &TcbInfoV3,
-) -> (TcbStatus, TcbStatus) {
+) -> (TcbStatus, TcbStatus, Option<Vec<String>>) {
     // we'll make sure the tcbinforoot is valid
     // check that fmspc is valid
     // check that pceid is valid
@@ -518,6 +520,7 @@ pub fn get_sgx_tdx_fmspc_tcbstatus_v3(
     let mut tdx_tcb_status = TcbStatus::TcbUnrecognized;
 
     let extension_pcesvn = sgx_extensions.tcb.pcesvn;
+    let mut advisory_ids = None;
 
     for tcb_level in tcbinfov3.tcb_info.tcb_levels.iter() {
         if sgx_tcb_status == TcbStatus::TcbUnrecognized {
@@ -526,6 +529,9 @@ pub fn get_sgx_tdx_fmspc_tcbstatus_v3(
             let pcesvn_ok = extension_pcesvn >= tcb_level.tcb.pcesvn;
             if sgxtcbcomponents_ok && pcesvn_ok {
                 sgx_tcb_status = TcbStatus::from_str(tcb_level.tcb_status.as_str());
+                if tee_type == SGX_TEE_TYPE {
+                    advisory_ids = tcb_level.advisory_ids.clone();
+                }
             }
         }
         if sgx_tcb_status != TcbStatus::TcbUnrecognized || sgx_tcb_status != TcbStatus::TcbRevoked {
@@ -539,12 +545,15 @@ pub fn get_sgx_tdx_fmspc_tcbstatus_v3(
                 };
                 if tdxtcbcomponents_ok {
                     tdx_tcb_status = TcbStatus::from_str(tcb_level.tcb_status.as_str());
+                    if tee_type == TDX_TEE_TYPE {
+                        advisory_ids = tcb_level.advisory_ids.clone();
+                    }
                     break;
                 }
             }
         }
     }
-    (sgx_tcb_status, tdx_tcb_status)
+    (sgx_tcb_status, tdx_tcb_status, advisory_ids)
 }
 
 fn is_empty(slice: &[u8]) -> bool {

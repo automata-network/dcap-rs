@@ -2,8 +2,7 @@ use crate::types::quotes::{body::QuoteBody, version_3::QuoteV3};
 use crate::types::{
     collaterals::IntelCollateral,
     tcbinfo::{TcbInfo, TcbInfoV2},
-    VerifiedOutput,
-    TcbStatus
+    TcbStatus, VerifiedOutput,
 };
 use crate::utils::cert::get_sgx_fmspc_tcbstatus_v2;
 
@@ -38,10 +37,7 @@ pub fn verify_quote_dcapv3(
     }
     let mut tcb_status = get_sgx_fmspc_tcbstatus_v2(&sgx_extensions, &tcb_info_v2);
 
-    assert!(
-        tcb_status != TcbStatus::TcbRevoked,
-        "FMSPC TCB Revoked"
-    );
+    assert!(tcb_status != TcbStatus::TcbRevoked, "FMSPC TCB Revoked");
 
     tcb_status = converge_tcb_status_with_qe_tcb(tcb_status, qe_tcb_status);
 
@@ -51,5 +47,6 @@ pub fn verify_quote_dcapv3(
         tcb_status,
         fmspc: sgx_extensions.fmspc,
         quote_body: quote_body,
+        advisory_ids: None,
     }
 }

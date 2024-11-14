@@ -59,8 +59,9 @@ pub fn verify_quote_dcapv4(
         (None, [0; 16])
     };
 
-    let (sgx_tcb_status, tdx_tcb_status) =
-        get_sgx_tdx_fmspc_tcbstatus_v3(&sgx_extensions, &tee_tcb_svn, &tcb_info_v3);
+    let tee_type = quote.header.tee_type;
+    let (sgx_tcb_status, tdx_tcb_status, advisory_ids) =
+        get_sgx_tdx_fmspc_tcbstatus_v3(tee_type, &sgx_extensions, &tee_tcb_svn, &tcb_info_v3);
     
     assert!(
         sgx_tcb_status != TcbStatus::TcbRevoked || tdx_tcb_status != TcbStatus::TcbRevoked,
@@ -107,5 +108,6 @@ pub fn verify_quote_dcapv4(
         tcb_status,
         fmspc: sgx_extensions.fmspc,
         quote_body: quote.quote_body,
+        advisory_ids: advisory_ids
     }
 }

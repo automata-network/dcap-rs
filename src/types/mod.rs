@@ -1,14 +1,13 @@
-use core::panic;
-
-use serde::{Serialize, Deserialize};
-use crate::constants::{ENCLAVE_REPORT_LEN, SGX_TEE_TYPE, TD10_REPORT_LEN};
 use self::quotes::body::*;
+use crate::constants::{ENCLAVE_REPORT_LEN, SGX_TEE_TYPE, TD10_REPORT_LEN, TDX_TEE_TYPE};
+use alloy_sol_types::SolValue;
+use serde::{Deserialize, Serialize};
 
-pub mod quotes;
-pub mod tcbinfo;
-pub mod enclave_identity;
 pub mod cert;
 pub mod collaterals;
+pub mod enclave_identity;
+pub mod quotes;
+pub mod tcbinfo;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TcbStatus {
@@ -19,7 +18,7 @@ pub enum TcbStatus {
     TcbOutOfDate,
     TcbOutOfDateConfigurationNeeded,
     TcbRevoked,
-    TcbUnrecognized
+    TcbUnrecognized,
 }
 
 impl TcbStatus {
@@ -33,7 +32,7 @@ impl TcbStatus {
             "OutOfDateConfigurationNeeded" => TcbStatus::TcbOutOfDateConfigurationNeeded,
             "Revoked" => TcbStatus::TcbRevoked,
             _ => TcbStatus::TcbUnrecognized,
-        }
+        };
     }
 }
 
@@ -47,7 +46,8 @@ pub struct VerifiedOutput {
     pub tee_type: u32,
     pub tcb_status: TcbStatus,
     pub fmspc: [u8; 6],
-    pub quote_body: QuoteBody
+    pub quote_body: QuoteBody,
+    pub advisory_ids: Option<Vec<String>>,
 }
 
 impl VerifiedOutput {
@@ -75,14 +75,19 @@ impl VerifiedOutput {
             TcbStatus::TcbUnrecognized => 7,
         });
         output_vec.extend_from_slice(&self.fmspc);
-        
+
         match self.quote_body {
             QuoteBody::SGXQuoteBody(body) => {
                 output_vec.extend_from_slice(&body.to_bytes());
-            },
+            }
             QuoteBody::TD10QuoteBody(body) => {
                 output_vec.extend_from_slice(&body.to_bytes());
             }
+        }
+
+        if let Some(advisory_ids) = self.advisory_ids.as_ref() {
+            let encoded = advisory_ids.abi_encode();
+            output_vec.extend_from_slice(encoded.as_slice());
         }
 
         output_vec
@@ -106,28 +111,35 @@ impl VerifiedOutput {
         };
         let mut fmspc = [0; 6];
         fmspc.copy_from_slice(&slice[7..13]);
-        let mut raw_quote_body = Vec::new();
-        raw_quote_body.extend_from_slice(&slice[13..]);
 
-        let quote_body = match raw_quote_body.len() {
-            ENCLAVE_REPORT_LEN => {
-                QuoteBody::SGXQuoteBody(EnclaveReport::from_bytes(&raw_quote_body))
-            },
-            TD10_REPORT_LEN => {
-                QuoteBody::TD10QuoteBody(TD10ReportBody::from_bytes(&raw_quote_body))
-            },
-            _ => {
-                panic!("Invalid quote body")
+        let mut offset = 13usize;
+        let quote_body = match u32::from_be_bytes(tee_type) {
+            SGX_TEE_TYPE => {
+                let raw_quote_body = &slice[offset..offset + ENCLAVE_REPORT_LEN];
+                offset += ENCLAVE_REPORT_LEN;
+                QuoteBody::SGXQuoteBody(EnclaveReport::from_bytes(raw_quote_body))
             }
+            TDX_TEE_TYPE => {
+                let raw_quote_body = &slice[offset..offset + TD10_REPORT_LEN];
+                offset += TD10_REPORT_LEN;
+                QuoteBody::TD10QuoteBody(TD10ReportBody::from_bytes(raw_quote_body))
+            }
+            _ => panic!("unknown TEE type"),
         };
+
+        let mut advisory_ids = None;
+        if offset < slice.len() {
+            let advisory_ids_slice = &slice[offset..];
+            advisory_ids = Some(<Vec<String>>::abi_decode(advisory_ids_slice, true).unwrap());
+        }
 
         VerifiedOutput {
             quote_version: u16::from_be_bytes(quote_version),
             tee_type: u32::from_be_bytes(tee_type),
             tcb_status,
             fmspc,
-            quote_body
+            quote_body,
+            advisory_ids,
         }
     }
-    
 }
