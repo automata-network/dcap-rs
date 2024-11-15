@@ -52,15 +52,7 @@ pub struct VerifiedOutput {
 
 impl VerifiedOutput {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let total_length: usize;
-        // this comparison is wrong and needs to be fixed once we begin supporting v5 quotes
-        if self.tee_type == SGX_TEE_TYPE {
-            total_length = 13 + ENCLAVE_REPORT_LEN;
-        } else {
-            total_length = 13 + TD10_REPORT_LEN;
-        }
-
-        let mut output_vec = Vec::with_capacity(total_length);
+        let mut output_vec = Vec::new();
 
         output_vec.extend_from_slice(&self.quote_version.to_be_bytes());
         output_vec.extend_from_slice(&self.tee_type.to_be_bytes());
