@@ -58,7 +58,7 @@ Patches applied:
 - `crypto-bigint`
 - `sha2`
 
-Make sure to include the following patches into your Program's `cargo.toml`.
+Make sure to include the following patches into your workspace `cargo.toml`.
 
 ```
 [patch.crates-io]
