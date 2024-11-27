@@ -11,9 +11,7 @@
 
 Intel Data Center Attestation Primitives Quote Verification Library (DCAP QVL) implemented in pure Rust. 
 
-This library is currently integrated into a RiscZero Guest Program that provides users the option to attest DCAP quotes directly on-chain, by publishing and verifying ZK SNARK proofs in the [AutomataDCAPAttestation](https://github.com/automata-network/automata-dcap-attestation) contract.
-
-To try out the demo of the DCAP RiscZero Program, we recommend checking out the [DCAP Bonsai CLI Demo](https://github.com/automata-network/dcap-bonsai-cli).
+This library can be integrated into zkVM programs that provide users the ability to attest DCAP quotes directly on-chain, by publishing and verifying ZK SNARK proofs in the [AutomataDCAPAttestation](https://github.com/automata-network/automata-dcap-attestation) contract.
 
 This library supports verification of the following quotes:
 -   V3 SGX Quotes
@@ -28,22 +26,47 @@ To use dcap-rs, add the following to `Cargo.toml`:
 dcap-rs = { git = "https://github.com/automata-network/dcap-rs.git" }
 ```
 
-### RiscZero Accelerated Crates
+### zkVM Patches
 
-This library can be compiled with the acclerated `p256` crate, to optimize the cycle costs for ECDSA Verification in the RiscZero Guest program. Check out this [repo](https://github.com/automata-network/RustCrypto-elliptic-curves) and [doc](https://thias-organization.gitbook.io/p256-documentation) to learn more about the accelerated `p256` crate.
+zkVM programs provide patches, which are simply modified Rust crates that can help reducing execution cycle costs in the VM.
 
-To fully optimize your Guest program, make sure to:
-- turn off the default feature, and enable the `accelerated` feature
-- include the following patch statements in `Cargo.toml`:
+We have tested `dcap-rs` with both RiscZero and SP1 zkVMs, and we would happily work with more zkVMs in the future.
+
+Read the section(s) below to learn about how patches can be applied towards corresponding zkVM programs.
+
+#### RiscZero Accelerators
+
+Patches applied: 
+- `crypto-bigint` 
+- `sha2`
+- Our attempt at accelerating [`p256`](https://github.com/automata-network/RustCrypto-elliptic-curves/tree/risczero/p256).
+
+Make sure to include the following patches into your Guest's `cargo.toml`.
 
 ```
-[dependencies]
-dcap-rs = { git = "https://github.com/automata-network/dcap-rs.git" , default-features = false, features = ["accelerated"] }
-
 [patch.crates-io]
 sha2 = { git = "https://github.com/risc0/RustCrypto-hashes", tag = "sha2-v0.10.6-risczero.0" }
 crypto-bigint = { git = "https://github.com/risc0/RustCrypto-crypto-bigint", tag = "v0.5.2-risczero.0" }
+p256 = { git = "https://github.com/automata-network/RustCrypto-elliptic-curves.git" }
 ```
+
+Click [here](https://dev.risczero.com/api/zkvm/acceleration) to learn more about RiscZero accelerators.
+
+#### SP1 Precompiles
+
+Patches applied: 
+- `crypto-bigint`
+- `sha2`
+
+Make sure to include the following patches into your Program's `cargo.toml`.
+
+```
+[patch.crates-io]
+sha2 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", branch = "patch-sha2-v0.10.8" }
+crypto-bigint = { git = "https://github.com/sp1-patches/RustCrypto-bigint", branch = "patch-v0.5.5" }
+```
+
+Click [here](https://docs.succinct.xyz/writing-programs/precompiles.html) to learn more about SP1 Precompiles.
 
 ---
 
