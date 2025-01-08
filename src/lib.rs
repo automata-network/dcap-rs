@@ -2,7 +2,30 @@ pub mod types;
 pub mod utils;
 pub mod constants;
 
+use crate::types::quotes::{version_4::QuoteV4, version_3::QuoteV3};
+use crate::types::VerifiedOutput;
+
+use serde_wasm_bindgen;
+use wasm_bindgen::prelude::*;
 use x509_parser::certificate::X509Certificate;
+
+#[wasm_bindgen]
+pub fn parse_v3_quote(raw_bytes: &[u8]) -> JsValue {
+    let quote_v3 = QuoteV3::from_bytes(raw_bytes);
+    serde_wasm_bindgen::to_value(&quote_v3).unwrap()
+}
+
+#[wasm_bindgen]
+pub fn parse_v4_quote(raw_bytes: &[u8]) -> JsValue {
+    let quote_v4 = QuoteV4::from_bytes(raw_bytes);
+    serde_wasm_bindgen::to_value(&quote_v4).unwrap()
+}
+
+#[wasm_bindgen]
+pub fn parse_verified_output(verified_output_bytes: &[u8]) -> JsValue {
+    let verified_output = VerifiedOutput::from_bytes(verified_output_bytes);
+    serde_wasm_bindgen::to_value(&verified_output).unwrap()
+}
 
 #[cfg(test)]
 mod tests {

@@ -5,8 +5,9 @@ pub mod version_4;
 pub mod body;
 
 use body::EnclaveReport;
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuoteHeader {
     pub version: u16,                   // [2 bytes]
                                         // Version of the quote data structure - 4, 5
@@ -71,7 +72,7 @@ impl QuoteHeader {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QeAuthData {
     pub size: u16,
     pub data: Vec<u8>,
@@ -88,7 +89,7 @@ impl QeAuthData {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CertData {
     pub cert_data_type: u16,            // [2 bytes]
                                         // Determines type of data required to verify the QE Report Signature in the Quote Signature Data structure. 
