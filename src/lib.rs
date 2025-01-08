@@ -2,12 +2,25 @@ pub mod types;
 pub mod utils;
 pub mod constants;
 
-use crate::types::quotes::{version_4::QuoteV4, version_3::QuoteV3};
+use crate::types::quotes::{QuoteHeader, version_3::QuoteV3, version_4::QuoteV4};
 use crate::types::VerifiedOutput;
 
+use serde::{Serialize, Deserialize};
 use serde_wasm_bindgen;
 use wasm_bindgen::prelude::*;
 use x509_parser::certificate::X509Certificate;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VersionedQuote {
+    V3(QuoteV3),
+    V4(QuoteV4)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedQuoteOutput {
+    pub version: u16,
+    pub quote: VersionedQuote,
+}
 
 #[wasm_bindgen]
 pub fn parse_v3_quote(raw_bytes: &[u8]) -> JsValue {
@@ -19,6 +32,25 @@ pub fn parse_v3_quote(raw_bytes: &[u8]) -> JsValue {
 pub fn parse_v4_quote(raw_bytes: &[u8]) -> JsValue {
     let quote_v4 = QuoteV4::from_bytes(raw_bytes);
     serde_wasm_bindgen::to_value(&quote_v4).unwrap()
+}
+
+#[wasm_bindgen]
+pub fn parse_quote(raw_bytes: &[u8]) -> JsValue {
+    let header = QuoteHeader::from_bytes(&raw_bytes[0..48]);
+    let parsed_quote_output = if header.version == 3 {
+        let quote_v3 = QuoteV3::from_bytes(raw_bytes);
+        ParsedQuoteOutput {
+            version: header.version,
+            quote: VersionedQuote::V3(quote_v3)
+        }
+    } else {
+        let quote_v4 = QuoteV4::from_bytes(raw_bytes);
+        ParsedQuoteOutput {
+            version: header.version,
+            quote: VersionedQuote::V4(quote_v4)
+        }
+    };
+    serde_wasm_bindgen::to_value(&parsed_quote_output).unwrap()
 }
 
 #[wasm_bindgen]
