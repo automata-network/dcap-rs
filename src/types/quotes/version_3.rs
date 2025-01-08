@@ -1,10 +1,12 @@
 // https://download.01.org/intel-sgx/latest/dcap-latest/linux/docs/Intel_SGX_ECDSA_QuoteLibReference_DCAP_API.pdf
 
 use super::{QuoteHeader, QeAuthData, CertData, body::EnclaveReport};
+use serde::{Serialize, Deserialize};
+use serde_big_array::BigArray;
 
 // high level sgx quote structure
 // [48 - header] [384 - isv enclave report] [4 - quote signature length] [var - quote signature] 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuoteV3 {
     pub header: QuoteHeader,                    // [48 bytes]
                                                 // Header of Quote data structure. This field is transparent (the user knows
@@ -40,12 +42,15 @@ impl QuoteV3 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuoteSignatureDataV3 {
+    #[serde(with = "BigArray")]
     pub isv_enclave_report_signature: [u8; 64],     // ECDSA signature, the r component followed by the s component, 2 x 32 bytes.
+    #[serde(with = "BigArray")]
     pub ecdsa_attestation_key: [u8; 64],            // EC KT-I Public Key, the x-coordinate followed by the y-coordinate 
                                                     // (on the RFC 6090 P-256 curve), 2 x 32 bytes.
     pub qe_report: EnclaveReport,
+    #[serde(with = "BigArray")]
     pub qe_report_signature: [u8; 64],
     pub qe_auth_data: QeAuthData,
     pub qe_cert_data: CertData,

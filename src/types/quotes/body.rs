@@ -1,10 +1,13 @@
-#[derive(Debug, Copy, Clone)]
+use serde::{Serialize, Deserialize};
+use serde_big_array::BigArray;
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum QuoteBody {
     SGXQuoteBody(EnclaveReport),
     TD10QuoteBody(TD10ReportBody)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnclaveReport {
     pub cpu_svn: [u8; 16],      // [16 bytes]
                                 // Security Version of the CPU (raw value)
@@ -30,6 +33,7 @@ pub struct EnclaveReport {
     pub mrsigner: [u8; 32],     // [32 bytes]
                                 // Measurement of the enclave signer. 
                                 // The MRSIGNER value is the SHA256 hash of the MODULUS field in the SIGSTRUCT.
+    #[serde(with = "BigArray")]
     pub reserved_3: [u8; 96],   // [96 bytes]
                                 // Reserved for future use - 0
     pub isv_prod_id: u16,       // [2 bytes]
@@ -39,8 +43,10 @@ pub struct EnclaveReport {
                                 // may want to supply different data to identical enclaves signed for different products.
     pub isv_svn: u16,           // [2 bytes]
                                 // Security Version of the enclave
+    #[serde(with = "BigArray")]
     pub reserved_4: [u8; 60],   // [60 bytes]
                                 // Reserved for future use - 0
+    #[serde(with = "BigArray")]
     pub report_data: [u8; 64],  // [64 bytes]
                                 // Additional report data.
                                 // The enclave is free to provide 64 bytes of custom data to the REPORT.
@@ -142,12 +148,14 @@ impl EnclaveReport {
 // [14]     : Tdxtcbcomp15      : QVL compares with TCBInfo.TCBLevels.tcb.tdxtcbcomponents.svn[14]
 // [15]     : Tdxtcbcomp16      : QVL compares with TCBInfo.TCBLevels.tcb.tdxtcbcomponents.svn[15]
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct TD10ReportBody {
     pub tee_tcb_svn: [u8; 16],          // [16 bytes]
                                         // Describes the TCB of TDX. (Refer to above)
+    #[serde(with = "BigArray")]
     pub mrseam: [u8; 48],               // [48 bytes]
                                         // Measurement of the TDX Module.
+    #[serde(with = "BigArray")]
     pub mrsignerseam: [u8; 48],         // [48 bytes]
                                         // Zero for Intel TDX Module
     pub seam_attributes: u64,           // [8 bytes]
@@ -156,23 +164,32 @@ pub struct TD10ReportBody {
                                         // TD Attributes (Refer to above)
     pub xfam: u64,                      // [8 bytes]
                                         // XFAM (eXtended Features Available Mask) is defined as a 64b bitmap, which has the same format as XCR0 or IA32_XSS MSR.
+    #[serde(with = "BigArray")]
     pub mrtd: [u8; 48],                 // [48 bytes]
                                         // (SHA384) Measurement of the initial contents of the TD.
+    #[serde(with = "BigArray")]
     pub mrconfigid: [u8; 48],           // [48 bytes]
                                         // Software-defined ID for non-owner-defined configuration of the TD, e.g., runtime or OS configuration.
+    #[serde(with = "BigArray")]
     pub mrowner: [u8; 48],              // [48 bytes]
                                         // Software-defined ID for the TD’s owner
+    #[serde(with = "BigArray")]
     pub mrownerconfig: [u8; 48],        // [48 bytes]
                                         // Software-defined ID for owner-defined configuration of the TD, 
                                         // e.g., specific to the workload rather than the runtime or OS.
+    #[serde(with = "BigArray")]
     pub rtmr0: [u8; 48],                // [48 bytes]
                                         // (SHA384) Root of Trust for Measurement (RTM) for the TD.
+    #[serde(with = "BigArray")]
     pub rtmr1: [u8; 48],                // [48 bytes]
                                         // (SHA384) Root of Trust for Measurement (RTM) for the TD.
+    #[serde(with = "BigArray")]
     pub rtmr2: [u8; 48],                // [48 bytes]
                                         // (SHA384) Root of Trust for Measurement (RTM) for the TD.
+    #[serde(with = "BigArray")]
     pub rtmr3: [u8; 48],                // [48 bytes]
                                         // (SHA384) Root of Trust for Measurement (RTM) for the TD.
+    #[serde(with = "BigArray")]
     pub report_data: [u8; 64],          // [64 bytes]
                                         // Additional report data.
                                         // The TD is free to provide 64 bytes of custom data to the REPORT.
