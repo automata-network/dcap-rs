@@ -87,6 +87,15 @@ impl QeAuthData {
             data,
         }
     }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut raw_bytes = Vec::new();
+        let mut size_bytes = u16::to_le_bytes(self.size).to_vec();
+        raw_bytes.append(&mut size_bytes);
+        let mut data_bytes = self.data.clone();
+        raw_bytes.append(&mut data_bytes);
+        raw_bytes
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,6 +133,17 @@ impl CertData {
             cert_data_size,
             cert_data,
         }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut raw_bytes = Vec::new();
+        let mut cert_data_type = u16::to_le_bytes(self.cert_data_type).to_vec();
+        let mut cert_data_size = u32::to_le_bytes(self.cert_data_size).to_vec();
+        let mut cert_data = self.cert_data.clone();
+        raw_bytes.append(&mut cert_data_type);
+        raw_bytes.append(&mut cert_data_size);
+        raw_bytes.append(&mut cert_data);
+        raw_bytes
     }
 
     pub fn get_cert_data(&self) -> CertDataType {

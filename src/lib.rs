@@ -22,6 +22,13 @@ pub struct ParsedQuoteOutput {
     pub quote: VersionedQuote,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocatedQuoteOutput {
+    pub version: u16,
+    pub quote: VersionedQuote,
+    pub quote_bytes: Vec<u8>,
+}
+
 #[wasm_bindgen]
 pub fn parse_v3_quote(raw_bytes: &[u8]) -> JsValue {
     let quote_v3 = QuoteV3::from_bytes(raw_bytes);
@@ -65,7 +72,7 @@ pub fn locate_raw_quote_js(txn_data: &[u8], version: u16) -> JsValue {
     serde_wasm_bindgen::to_value(&located_quote).unwrap()
 }
 
-pub fn locate_raw_quote(txn_data: &[u8], version: u16) -> ParsedQuoteOutput {
+pub fn locate_raw_quote(txn_data: &[u8], version: u16) -> LocatedQuoteOutput {
     if version == 3 {
         let possible_quote_bytes_vec = find_possible_quote_bytes_vec(txn_data, 3);
         for possible_quote_bytes in possible_quote_bytes_vec {
@@ -75,9 +82,11 @@ pub fn locate_raw_quote(txn_data: &[u8], version: u16) -> ParsedQuoteOutput {
             // Currently we return the first matched quote, might not be accurate
             // It's better to do a double check by passing the verified output
             if let Ok(quote_v3) = result {
-                return ParsedQuoteOutput {
+                let quote_bytes = quote_v3.clone().to_bytes();
+                return LocatedQuoteOutput {
                     version: version,
                     quote: VersionedQuote::V3(quote_v3),
+                    quote_bytes: quote_bytes,
                 };
             }
         }
@@ -90,9 +99,11 @@ pub fn locate_raw_quote(txn_data: &[u8], version: u16) -> ParsedQuoteOutput {
             // Currently we return the first matched quote, might not be accurate
             // It's better to do a double check by passing the verified output
             if let Ok(quote_v4) = result {
-                return ParsedQuoteOutput {
+                let quote_bytes = quote_v4.clone().to_bytes();
+                return LocatedQuoteOutput {
                     version: version,
                     quote: VersionedQuote::V4(quote_v4),
+                    quote_bytes: quote_bytes,
                 }
             }
         }
@@ -183,6 +194,8 @@ mod tests {
         let version = 3;
         let parsed_quote = locate_raw_quote(&txn_data, version);
         println!("locate_raw_quote: {:?}", parsed_quote);
+        let quote_v3 = QuoteV3::from_bytes(&parsed_quote.quote_bytes);
+        println!("quote_v3: {:?}", quote_v3);
     }
 
     #[test]
@@ -192,6 +205,8 @@ mod tests {
         let version = 4;
         let parsed_quote = locate_raw_quote(&txn_data, version);
         println!("locate_raw_quote: {:?}", parsed_quote);
+        let quote_v4 = QuoteV4::from_bytes(&parsed_quote.quote_bytes);
+        println!("quote_v4: {:?}", quote_v4);
     }
 
     #[test]
