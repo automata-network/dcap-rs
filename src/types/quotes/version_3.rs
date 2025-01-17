@@ -40,6 +40,19 @@ impl QuoteV3 {
             signature,
         }
     }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut raw_bytes = Vec::new();
+        let mut header_bytes = self.header.to_bytes().to_vec(); // 48 bytes
+        let mut isv_enclave_report_bytes = self.isv_enclave_report.to_bytes().to_vec(); // 384 bytes
+        let mut signature_len_bytes = u32::to_le_bytes(self.signature_len).to_vec(); // 4 bytes
+        let mut signature_bytes = self.signature.to_bytes();
+        raw_bytes.append(&mut header_bytes);
+        raw_bytes.append(&mut isv_enclave_report_bytes);
+        raw_bytes.append(&mut signature_len_bytes);
+        raw_bytes.append(&mut signature_bytes);
+        raw_bytes
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,5 +91,22 @@ impl QuoteSignatureDataV3 {
             qe_auth_data,
             qe_cert_data,
         }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut raw_bytes = Vec::new();
+        let mut isv_enclave_report_signature_bytes = self.isv_enclave_report_signature.clone().to_vec();
+        let mut ecdsa_attestation_key_bytes = self.ecdsa_attestation_key.clone().to_vec();
+        let mut qe_report_bytes = self.qe_report.to_bytes().to_vec();
+        let mut qe_report_signature_bytes = self.qe_report_signature.clone().to_vec();
+        let mut qe_auth_data_bytes = self.qe_auth_data.to_bytes();
+        let mut qe_cert_data_bytes = self.qe_cert_data.to_bytes();
+        raw_bytes.append(&mut isv_enclave_report_signature_bytes);
+        raw_bytes.append(&mut ecdsa_attestation_key_bytes);
+        raw_bytes.append(&mut qe_report_bytes);
+        raw_bytes.append(&mut qe_report_signature_bytes);
+        raw_bytes.append(&mut qe_auth_data_bytes);
+        raw_bytes.append(&mut qe_cert_data_bytes);
+        raw_bytes
     }
 }
