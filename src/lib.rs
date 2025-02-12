@@ -7,11 +7,13 @@ use x509_parser::certificate::X509Certificate;
 #[cfg(test)]
 mod tests {
     use crate::types::tcbinfo::{TcbInfoV2, TcbInfoV3};
+    use crate::types::enclave_identity::EnclaveIdentityV2;
     use crate::types::quotes::{version_4::QuoteV4, version_3::QuoteV3};
     use crate::types::collaterals::IntelCollateral;
 
     use crate::utils::cert::{hash_crl_keccak256, hash_x509_keccak256, parse_crl_der, parse_pem, parse_x509_der, verify_crl};
     use crate::utils::tcbinfo::{validate_tcbinfov2, validate_tcbinfov3, get_tcbinfov3_content_hash};
+    use crate::utils::enclave_identity::get_enclave_identityv2_content_hash;
     use crate::utils::quotes::{
         version_3::verify_quote_dcapv3, 
         version_4::verify_quote_dcapv4
@@ -133,5 +135,19 @@ mod tests {
         let tcb_v3_tdx_1_content_hash = get_tcbinfov3_content_hash(&tcb_v3_tdx_1);
     
         assert_eq!(tcb_v3_tdx_0_content_hash, tcb_v3_tdx_1_content_hash);
+    }
+
+    #[test]
+    fn test_identity_v2_content_hash() {
+        let identity_v2_0_json_string = include_str!("../data/identityv2_0.json");
+        let identity_v2_1_json_string = include_str!("../data/identityv2_1.json");
+
+        let identity_v2_0: EnclaveIdentityV2 = serde_json::from_str(&identity_v2_0_json_string).unwrap();
+        let identity_v2_1: EnclaveIdentityV2 = serde_json::from_str(&identity_v2_1_json_string).unwrap();
+    
+        let identity_v2_0_content_hash = get_enclave_identityv2_content_hash(&identity_v2_0);
+        let identity_v2_1_content_hash = get_enclave_identityv2_content_hash(&identity_v2_1);
+
+        assert_eq!(identity_v2_0_content_hash, identity_v2_1_content_hash);
     }
 }
