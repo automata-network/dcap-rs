@@ -249,7 +249,7 @@ pub struct TcbInfoV2Inner {
     pub next_update: String,
     pub fmspc: String,
     pub pce_id: String,
-    pub tcb_type: u64,
+    pub tcb_type: u8,
     pub tcb_evaluation_data_number: u32,
     pub tcb_levels: Vec<TcbInfoV2TcbLevelItem>,
 }
@@ -576,7 +576,7 @@ pub struct TcbInfoV3Inner {
     pub next_update: String,
     pub fmspc: String,
     pub pce_id: String,
-    pub tcb_type: u64,
+    pub tcb_type: u8,
     pub tcb_evaluation_data_number: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tdx_module: Option<TdxModule>,
