@@ -11,7 +11,7 @@ mod tests {
     use crate::types::collaterals::IntelCollateral;
 
     use crate::utils::cert::{hash_crl_keccak256, hash_x509_keccak256, parse_crl_der, parse_pem, parse_x509_der, verify_crl};
-    use crate::utils::tcbinfo::{validate_tcbinfov2, validate_tcbinfov3};
+    use crate::utils::tcbinfo::{validate_tcbinfov2, validate_tcbinfov3, get_tcbinfov3_content_hash};
     use crate::utils::quotes::{
         version_3::verify_quote_dcapv3, 
         version_4::verify_quote_dcapv4
@@ -119,5 +119,19 @@ mod tests {
         println!("{:?}", root_hash);
         println!("{:?}", sign_hash);
         println!("{:?}", crl_hash);
+    }
+
+    #[test]
+    fn test_tcb_v3_tdx_content_hash() {
+        let tcb_v3_tdx_0_json_string = include_str!("../data/tcb_info_v3_tdx_0.json");
+        let tcb_v3_tdx_1_json_string = include_str!("../data/tcb_info_v3_tdx_1.json");
+
+        let tcb_v3_tdx_0: TcbInfoV3 = serde_json::from_str(&tcb_v3_tdx_0_json_string).unwrap();
+        let tcb_v3_tdx_1: TcbInfoV3 = serde_json::from_str(&tcb_v3_tdx_1_json_string).unwrap();
+
+        let tcb_v3_tdx_0_content_hash = get_tcbinfov3_content_hash(&tcb_v3_tdx_0);
+        let tcb_v3_tdx_1_content_hash = get_tcbinfov3_content_hash(&tcb_v3_tdx_1);
+    
+        assert_eq!(tcb_v3_tdx_0_content_hash, tcb_v3_tdx_1_content_hash);
     }
 }
