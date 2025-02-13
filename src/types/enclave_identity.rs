@@ -142,10 +142,10 @@ pub struct EnclaveIdentityV2 {
 #[serde(rename_all = "camelCase")]
 pub struct EnclaveIdentityV2Inner {
     pub id: String,
-    pub version: u64,
+    pub version: u32,
     pub issue_date: String,
     pub next_update: String,
-    pub tcb_evaluation_data_number: u64,
+    pub tcb_evaluation_data_number: u32,
     pub miscselect: String,
     pub miscselect_mask: String,
     pub attributes: String,
