@@ -66,7 +66,7 @@ fn common_verify_and_fetch_tcb(
     // check that CRLs are valid
     match &intel_crls.sgx_root_ca_crl {
         Some(crl) => {
-            assert!(verify_crl(crl, &intel_sgx_root_cert));
+            assert!(verify_crl(crl, &intel_sgx_root_cert, current_time));
         }
         None => {
             panic!("No SGX Root CA CRL found");
@@ -76,7 +76,7 @@ fn common_verify_and_fetch_tcb(
     let signing_cert_revoked = intel_crls.is_cert_revoked(&signing_cert);
     assert!(!signing_cert_revoked, "TCB Signing Cert revoked");
     assert!(
-        verify_certificate(&signing_cert, &intel_sgx_root_cert),
+        verify_certificate(&signing_cert, &intel_sgx_root_cert, current_time),
         "TCB Signing Cert is not signed by Intel SGX Root CA"
     );
 
@@ -123,13 +123,13 @@ fn common_verify_and_fetch_tcb(
     let pck_cert = &certchain[0];
     let pck_cert_issuer = &certchain[1];
     assert!(
-        check_pck_issuer_and_crl(pck_cert, pck_cert_issuer, &intel_crls),
+        check_pck_issuer_and_crl(pck_cert, pck_cert_issuer, &intel_crls, current_time),
         "Invalid PCK Issuer or CRL"
     );
 
     // verify that the cert chain signatures are valid
     assert!(
-        verify_certchain_signature(&certchain, &intel_sgx_root_cert),
+        verify_certchain_signature(&certchain, &intel_sgx_root_cert, current_time),
         "Invalid PCK Chain"
     );
 
@@ -186,6 +186,7 @@ fn check_pck_issuer_and_crl(
     pck_cert: &X509Certificate,
     pck_issuer_cert: &X509Certificate,
     intel_crls: &IntelSgxCrls,
+    current_time: u64
 ) -> bool {
     // we'll check what kind of cert is it, and validate the appropriate CRL
     let pck_cert_subject_cn = get_x509_issuer_cn(pck_cert);
@@ -200,10 +201,12 @@ fn check_pck_issuer_and_crl(
         "Intel SGX PCK Platform CA" => verify_crl(
             intel_crls.sgx_pck_platform_crl.as_ref().unwrap(),
             pck_issuer_cert,
+            current_time
         ),
         "Intel SGX PCK Processor CA" => verify_crl(
             &intel_crls.sgx_pck_processor_crl.as_ref().unwrap(),
             pck_issuer_cert,
+            current_time
         ),
         _ => {
             panic!("Unknown PCK Cert Subject CN: {}", pck_cert_subject_cn);

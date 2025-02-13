@@ -73,37 +73,41 @@ pub fn parse_certchain<'a>(pem_certs: &'a [Pem]) -> Vec<X509Certificate<'a>> {
         .collect()
 }
 
-pub fn check_certificate<'a, 'b, 'c>(
-    cert: &X509Certificate<'a>,
-    issuer: &X509Certificate<'b>,
-    crl: &CertificateRevocationList<'c>,
-    subject_name: &str,
-    current_time: u64,
-) -> bool {
-    let is_cert_valid = validate_certificate(
-        cert,
-        crl,
-        subject_name,
-        issuer.subject().to_string().as_str(),
-        current_time,
-    );
-    let is_cert_verified = verify_certificate(cert, issuer);
-    is_cert_valid && is_cert_verified
-}
+pub fn verify_certificate(cert: &X509Certificate, signer_cert: &X509Certificate, current_time: u64) -> bool {
+    // verifies that the certificate is unexpired
+    let issue_date = cert.validity().not_before.timestamp() as u64;
+    let expiry_date = cert.validity().not_after.timestamp() as u64;
+    if (current_time < issue_date) || (current_time > expiry_date) {
+        return false;
+    }
 
-pub fn verify_certificate(cert: &X509Certificate, signer_cert: &X509Certificate) -> bool {
     // verifies that the certificate is valid
     let data = cert.tbs_certificate.as_ref();
     let signature = cert.signature_value.as_ref();
     let public_key = signer_cert.public_key().subject_public_key.as_ref();
+
     // make sure that the issuer is the signer
     if cert.issuer() != signer_cert.subject() {
         return false;
     }
+
     verify_p256_signature_der(data, signature, public_key)
 }
 
-pub fn verify_crl(crl: &CertificateRevocationList, signer_cert: &X509Certificate) -> bool {
+pub fn verify_crl(crl: &CertificateRevocationList, signer_cert: &X509Certificate, current_time: u64) -> bool {
+    // verifies that the crl is unexpired
+    let issue_date = crl.last_update().timestamp() as u64;
+    let expiry_date = if let Some(next_update) = crl.next_update() {
+        next_update.timestamp() as u64
+    } else {
+        // next update field is optional
+        u64::max_value()
+    };
+
+    if (current_time < issue_date) || (current_time > expiry_date) {
+        return false;
+    }
+
     // verifies that the crl is valid
     let data = crl.tbs_cert_list.as_ref();
     let signature = crl.signature_value.as_ref();
@@ -115,62 +119,24 @@ pub fn verify_crl(crl: &CertificateRevocationList, signer_cert: &X509Certificate
     verify_p256_signature_der(data, signature, public_key)
 }
 
-pub fn validate_certificate(
-    _cert: &X509Certificate,
-    crl: &CertificateRevocationList,
-    subject_name: &str,
-    issuer_name: &str,
-    current_time: u64,
-) -> bool {
-    // check that the certificate is a valid cert.
-    // i.e., make sure that the cert name is correct, issued by intel,
-    // has not been revoked, etc.
-    // for now, we'll just return true
-
-    // check if certificate is expired
-    let issue_date = _cert.validity().not_before.timestamp() as u64;
-    let expiry_date = _cert.validity().not_after.timestamp() as u64;
-
-    if (current_time < issue_date) || (current_time > expiry_date) {
-        return false;
-    }
-
-    // check that the certificate is issued to the correct subject
-    if _cert.subject().to_string().as_str() != subject_name {
-        return false;
-    }
-
-    // check if certificate is issued by the correct issuer
-    if _cert.issuer().to_string().as_str() != issuer_name {
-        return false;
-    }
-
-    // check if certificate has been revoked
-    let is_revoked = crl.iter_revoked_certificates().any(|entry| {
-        (entry.revocation_date.timestamp() as u64) < current_time
-            && entry.user_certificate == _cert.tbs_certificate.serial
-    });
-
-    !is_revoked
-}
-
 // we'll just verify that the certchain signature matches, any other checks will be done by the caller
 pub fn verify_certchain_signature<'a, 'b>(
     certs: &[X509Certificate<'a>],
     root_cert: &X509Certificate<'b>,
+    current_time: u64
 ) -> bool {
     // verify that the cert chain is valid
     let mut iter = certs.iter();
     let mut prev_cert = iter.next().unwrap();
     for cert in iter {
         // verify that the previous cert signed the current cert
-        if !verify_certificate(prev_cert, cert) {
+        if !verify_certificate(prev_cert, cert, current_time) {
             return false;
         }
         prev_cert = cert;
     }
     // verify that the root cert signed the last cert
-    verify_certificate(prev_cert, root_cert)
+    verify_certificate(prev_cert, root_cert, current_time)
 }
 
 pub fn is_cert_revoked<'a, 'b>(
