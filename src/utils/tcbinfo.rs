@@ -14,7 +14,6 @@ pub fn validate_tcbinfov2(tcbinfov2: &TcbInfoV2, sgx_signing_cert: &X509Certific
 
     // check that the current time is between the issue_date and next_update_date
     if current_time < issue_date_seconds || current_time > next_update_seconds {
-        assert!(false);
         return false;
     }
 

@@ -77,13 +77,13 @@ pub fn check_certificate<'a, 'b, 'c>(
     cert: &X509Certificate<'a>,
     issuer: &X509Certificate<'b>,
     crl: &CertificateRevocationList<'c>,
-    subject_name: &str,
+    // subject_name: &str,
     current_time: u64,
 ) -> bool {
     let is_cert_valid = validate_certificate(
         cert,
         crl,
-        subject_name,
+        cert.subject().to_string().as_str(),
         issuer.subject().to_string().as_str(),
         current_time,
     );
@@ -103,7 +103,20 @@ pub fn verify_certificate(cert: &X509Certificate, signer_cert: &X509Certificate)
     verify_p256_signature_der(data, signature, public_key)
 }
 
-pub fn verify_crl(crl: &CertificateRevocationList, signer_cert: &X509Certificate) -> bool {
+pub fn verify_crl(crl: &CertificateRevocationList, signer_cert: &X509Certificate, current_time: u64) -> bool {
+    // verifies that the crl is unexpired
+    let issue_date = crl.last_update().timestamp() as u64;
+    let expiry_date = if let Some(next_update) = crl.next_update() {
+        next_update.timestamp() as u64
+    } else {
+        // next update field is optional
+        u64::max_value()
+    };
+
+    if (current_time < issue_date) || (current_time > expiry_date) {
+        return false;
+    }
+
     // verifies that the crl is valid
     let data = crl.tbs_cert_list.as_ref();
     let signature = crl.signature_value.as_ref();
