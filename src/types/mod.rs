@@ -37,9 +37,9 @@ impl TcbStatus {
 }
 
 // serialization:
-// [quote_vesion][tee_type][tcb_status][fmspc][quote_body_raw_bytes]
-// 2 bytes + 4 bytes + 1 byte + 6 bytes + var (SGX_ENCLAVE_REPORT = 384; TD10_REPORT = 584)
-// total: 13 + var bytes
+// [quote_vesion][tee_type][tcb_status][fmspc][quote_body_raw_bytes][abi-encoded string array of tcb_advisory_ids]
+// 2 bytes + 4 bytes + 1 byte + 6 bytes + var (SGX_ENCLAVE_REPORT = 384; TD10_REPORT = 584) + var
+// total: 13 + (384 or 584) + var bytes
 #[derive(Debug)]
 pub struct VerifiedOutput {
     pub quote_version: u16,
@@ -54,8 +54,10 @@ impl VerifiedOutput {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut output_vec = Vec::new();
 
+        // big-endian encoded to ensure on-chain compatibility
         output_vec.extend_from_slice(&self.quote_version.to_be_bytes());
-        output_vec.extend_from_slice(&self.tee_type.to_be_bytes());
+        
+        output_vec.extend_from_slice(&self.tee_type.to_le_bytes());
         output_vec.push(match self.tcb_status {
             TcbStatus::OK => 0,
             TcbStatus::TcbSwHardeningNeeded => 1,
@@ -105,7 +107,7 @@ impl VerifiedOutput {
         fmspc.copy_from_slice(&slice[7..13]);
 
         let mut offset = 13usize;
-        let quote_body = match u32::from_be_bytes(tee_type) {
+        let quote_body = match u32::from_le_bytes(tee_type) {
             SGX_TEE_TYPE => {
                 let raw_quote_body = &slice[offset..offset + ENCLAVE_REPORT_LEN];
                 offset += ENCLAVE_REPORT_LEN;
@@ -127,7 +129,7 @@ impl VerifiedOutput {
 
         VerifiedOutput {
             quote_version: u16::from_be_bytes(quote_version),
-            tee_type: u32::from_be_bytes(tee_type),
+            tee_type: u32::from_le_bytes(tee_type),
             tcb_status,
             fmspc,
             quote_body,
