@@ -76,7 +76,7 @@ fn common_verify_and_fetch_tcb(
     let signing_cert_revoked = intel_crls.is_cert_revoked(&signing_cert);
     assert!(!signing_cert_revoked, "TCB Signing Cert revoked");
     assert!(
-        verify_certificate(&signing_cert, &intel_sgx_root_cert),
+        verify_certificate(&signing_cert, &intel_sgx_root_cert, current_time),
         "TCB Signing Cert is not signed by Intel SGX Root CA"
     );
 
@@ -129,7 +129,7 @@ fn common_verify_and_fetch_tcb(
 
     // verify that the cert chain signatures are valid
     assert!(
-        verify_certchain_signature(&certchain, &intel_sgx_root_cert),
+        verify_certchain_signature(&certchain, &intel_sgx_root_cert, current_time),
         "Invalid PCK Chain"
     );
 
