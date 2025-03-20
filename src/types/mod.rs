@@ -1,7 +1,7 @@
 use self::quotes::body::*;
 use crate::constants::{ENCLAVE_REPORT_LEN, SGX_TEE_TYPE, TD10_REPORT_LEN, TDX_TEE_TYPE};
 use alloy_sol_types::SolValue;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 
 pub mod cert;
 pub mod collaterals;
@@ -9,7 +9,7 @@ pub mod enclave_identity;
 pub mod quotes;
 pub mod tcbinfo;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub enum TcbStatus {
     OK,
     TcbSwHardeningNeeded,
@@ -33,6 +33,22 @@ impl TcbStatus {
             "Revoked" => TcbStatus::TcbRevoked,
             _ => TcbStatus::TcbUnrecognized,
         };
+    }
+}
+
+impl Serialize for TcbStatus {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        let s = match self {
+            TcbStatus::OK  => "UpToDate",
+            TcbStatus::TcbSwHardeningNeeded => "SWHardeningNeeded",
+            TcbStatus::TcbConfigurationAndSwHardeningNeeded => "ConfigurationAndSWHardeningNeeded",
+            TcbStatus::TcbConfigurationNeeded => "ConfigurationNeeded",
+            TcbStatus::TcbOutOfDate => "OutOfDate",
+            TcbStatus::TcbOutOfDateConfigurationNeeded => "OutOfDateConfigurationNeeded",
+            TcbStatus::TcbRevoked => "Revoked",
+            TcbStatus::TcbUnrecognized => "Unrecognized",
+        };
+        serializer.serialize_str(s)
     }
 }
 
