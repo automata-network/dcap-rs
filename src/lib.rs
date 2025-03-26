@@ -1,6 +1,7 @@
 pub mod trust_store;
 pub mod types;
 pub mod utils;
+pub mod solana;
 
 use std::time::SystemTime;
 
@@ -69,6 +70,15 @@ pub fn verify_dcap_quote(
         advisory_ids,
     })
 }
+
+
+pub fn verify_dcap_quote_on_solana(
+    _current_time: SystemTime,
+    _bytes: &mut &[u8],
+) -> anyhow::Result<VerifiedOutput> {
+    todo!()
+}
+
 
 fn verify_integrity(
     current_time: SystemTime,
