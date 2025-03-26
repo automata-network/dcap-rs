@@ -1,173 +1,192 @@
+use super::{UInt32LE, tcb_info::TcbStatus};
+use crate::utils::u32_hex;
+use anyhow::Context;
+use chrono::Utc;
+use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
 
-// EnclaveIdentityV2:
-//     type: object
-//     description: SGX Enclave Identity data structure encoded as JSON string in case of success
-//         (200 HTTP status code)
-//     properties:
-//         enclaveIdentity:
-//             type: object
-//             properties:
-//                 id:
-//                     type: string
-//                     description: Identifier of the SGX Enclave issued by Intel. Supported values are QE, QVE and TD_QE
-//                 version:
-//                     type: integer
-//                     example: 2
-//                     description: Version of the structure
-//                 issueDate:
-//                     type: string
-//                     format: date-time
-//                     description: >-
-//                         Representation of date and time the Enclave Identity information
-//                         was created. The time shall be in UTC and the encoding shall
-//                         be compliant to ISO 8601 standard (YYYY-MM-DDThh:mm:ssZ)
-//                 nextUpdate:
-//                     type: string
-//                     format: date-time
-//                     description: >-
-//                         Representation of date and time by which next Enclave Identity
-//                         information will be issued. The time shall be in
-//                         UTC and the encoding shall be compliant to ISO 8601 standard
-//                         (YYYY-MM-DDThh:mm:ssZ)
-//                 tcbEvaluationDataNumber:
-//                     type: integer
-//                     example: 2
-//                     description: >-
-//                         A monotonically increasing sequence number changed
-//                         when Intel updates the content of the TCB evaluation data
-//                         set: TCB Info, QE Idenity and QVE Identity. The tcbEvaluationDataNumber
-//                         update is synchronized across TCB Info for all flavors of
-//                         SGX CPUs (Family-Model-Stepping-Platform-CustomSKU) and QE/QVE
-//                         Identity. This sequence number allows users to easily determine
-//                         when a particular TCB Info/QE Idenity/QVE Identiy superseedes
-//                         another TCB Info/QE Identity/QVE Identity (value: current
-//                         TCB Recovery event number stored in the database).
-//                 miscselect:
-//                     type: string
-//                     pattern: ^[0-9a-fA-F]{8}$
-//                     example: '00000000'
-//                     description: Base 16-encoded string representing miscselect "golden" value (upon applying mask).
-//                 miscselectMask:
-//                     type: string
-//                     pattern: ^[0-9a-fA-F]{8}$
-//                     example: '00000000'
-//                     description: Base 16-encoded string representing mask to be applied to miscselect value retrieved from the platform.
-//                 attributes:
-//                     type: string
-//                     pattern: ^[0-9a-fA-F]{32}$
-//                     example: '00000000000000000000000000000000'
-//                     description: Base 16-encoded string representing attributes "golden" value (upon applying mask).
-//                 attributesMask:
-//                     type: string
-//                     pattern: ^[0-9a-fA-F]{32}$
-//                     example: '00000000000000000000000000000000'
-//                     description: Base 16-encoded string representing mask to be applied to attributes value retrieved from the platform.
-//                 mrsigner:
-//                     type: string
-//                     pattern: ^[0-9a-fA-F]{64}$
-//                     example: '0000000000000000000000000000000000000000000000000000000000000000'
-//                     description: Base 16-encoded string representing mrsigner hash.
-//                 isvprodid:
-//                     type: integer
-//                     example: 0
-//                     minimum: 0
-//                     maximum: 65535
-//                     description: Enclave Product ID.
-//                 tcbLevels:
-//                     description: >-
-//                         Sorted list of supported Enclave TCB levels for given
-//                         QVE encoded as a JSON array of Enclave TCB level objects.
-//                     type: array
-//                     items:
-//                         type: object
-//                         properties:
-//                             tcb:
-//                                 type: object
-//                                 properties:
-//                                     isvsvn:
-//                                         description: SGX Enclave's ISV SVN
-//                                         type: integer
-//                             tcbDate:
-//                                 type: string
-//                                 format: date-time
-//                                 description: >-
-//                                     If there are security advisories published by Intel after tcbDate
-//                                     that are for issues whose mitigations are currently enforced* by SGX attestation,
-//                                     then the value of tcbStatus for the TCB level will not be UpToDate.
-//                                     Otherwise (i.e., either no advisories after or not currently enforced),
-//                                     the value of tcbStatus for the TCB level will not be OutOfDate.
-// 
-//                                     The time shall be in UTC and the encoding shall
-//                                     be compliant to ISO 8601 standard (YYYY-MM-DDThh:mm:ssZ).
-//                             tcbStatus:
-//                                 type: string
-//                                 enum:
-//                                     - UpToDate
-//                                     - OutOfDate
-//                                     - Revoked
-//                                 description: >-
-//                                     TCB level status. One of the following values:
-// 
-//                                     "UpToDate" - TCB level of the SGX platform is up-to-date.
-// 
-//                                     "OutOfDate" - TCB level of SGX platform is outdated.
-// 
-//                                     "Revoked" - TCB level of SGX platform is revoked.
-//                                     The platform is not trustworthy.
-//                             advisoryIDs:
-//                                 type: array
-//                                 description: >-
-//                                     Array of Advisory IDs referring to Intel security advisories that
-//                                     provide insight into the reason(s) for the value of tcbStatus for
-//                                     this TCB level when the value is not UpToDate.
-// 
-//                                     This field is optional. It will be present only
-//                                     if the list of Advisory IDs is not empty.
-//                                 items:
-//                                     type: string
-//         signature:
-//             type: string
-//             description: Hex-encoded string representation of a signature calculated
-//                 over qeIdentity body (without whitespaces) using TCB Info Signing Key.
+const ENCLAVE_IDENTITY_V2: u16 = 2;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct EnclaveIdentityV2 {
-    pub enclave_identity: EnclaveIdentityV2Inner,
-    pub signature: String,
+pub struct QeTcb {
+    pub isvsvn: u16,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Deserialize, Serialize, Debug)]
+pub struct QuotingEnclaveIdentityAndSignature {
+    #[serde(rename = "enclaveIdentity")]
+    enclave_identity_raw: Box<RawValue>,
+    #[serde(with = "hex")]
+    signature: Vec<u8>,
+}
+
+impl QuotingEnclaveIdentityAndSignature {
+    /// Validate the enclave identity and return the enclave identity if it is valid
+    /// It checks the signature, the version, and the timestamp.
+    /// The enclave identities should have their version set to 2.
+    pub fn validate_as_enclave_identity(
+        &self,
+        public_key: &VerifyingKey,
+    ) -> anyhow::Result<EnclaveIdentity> {
+        public_key
+            .verify(
+                self.enclave_identity_raw.to_string().as_bytes(),
+                &Signature::from_slice(&self.signature)?,
+            )
+            .context("Failed to verify enclave identity signature")?;
+
+        let enclave_identity: EnclaveIdentity =
+            serde_json::from_str(self.enclave_identity_raw.get())
+                .context("Failed to deserialize enclave identity")?;
+
+        if enclave_identity.version != ENCLAVE_IDENTITY_V2 {
+            return Err(anyhow::anyhow!(
+                "unsupported enclave identity version, only v2 is supported"
+            ));
+        }
+
+        Ok(enclave_identity)
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct EnclaveIdentityV2Inner {
-    pub id: String,
-    pub version: u32,
-    pub issue_date: String,
-    pub next_update: String,
-    pub tcb_evaluation_data_number: u32,
-    pub miscselect: String,
-    pub miscselect_mask: String,
-    pub attributes: String,
-    pub attributes_mask: String,
-    pub mrsigner: String,
+pub struct EnclaveIdentity {
+    /// Identifier of the SGX Enclave issued by Intel.
+    pub id: EnclaveType,
+
+    /// Version of the structure.
+    pub version: u16,
+
+    /// The time the Enclave Identity Information was created. The time shalle be in UTC
+    /// and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
+    pub issue_date: chrono::DateTime<Utc>,
+
+    /// The time by which next Enclave Identity information will be issued. The time shall be in UTC
+    /// and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
+    pub next_update: chrono::DateTime<Utc>,
+
+    /// A monotonically increasing sequence number changed when Intel updates the content of the TCB evaluation data set:
+    /// TCB Info, QE Identity, QVE Identity. The tcbEvaluationDataNUmber update is synchronized across TCB infor for all
+    /// flavours of SGX CPUs (Family-Model-Stepping-Platform-CustomSKU) and QE/QVE Identity.
+    /// This sequence number allows users to easily determine when a particular TCB Info/QE Identity/QVE Identity
+    /// superseedes another TCB Info/QE Identity/QVE Identity (value: current TCB Recovery event number stored in the database).
+    _tcb_evaluation_data_number: u16,
+
+    /// Base 16-encoded string representing miscselect "golden" value (upon applying mask).
+    #[serde(with = "u32_hex")]
+    pub miscselect: UInt32LE,
+
+    /// Base 16-encoded string representing mask to be applied to miscselect value retrieved from the platform.
+    #[serde(with = "u32_hex")]
+    pub miscselect_mask: UInt32LE,
+
+    /// Base 16-encoded string representing attributes "golden" value (upon applying mask).
+    #[serde(with = "hex")]
+    pub attributes: [u8; 16],
+
+    /// Base 16-encoded string representing mask to be applied to attributes value retrieved from the platform.
+    #[serde(with = "hex")]
+    pub attributes_mask: [u8; 16],
+
+    /// Base 16-encoded string representing mrsigner hash.
+    #[serde(with = "hex")]
+    pub mrsigner: [u8; 32],
+
+    /// Enclave Product ID.
     pub isvprodid: u16,
-    pub tcb_levels: Vec<EnclaveIdentityV2TcbLevelItem>,
+
+    /// Sorted list of supported Enclave TCB levels for given QVE encoded as a JSON array of Enclave TCB level objects.
+    pub tcb_levels: Vec<QeTcbLevel>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+impl EnclaveIdentity {
+    pub fn get_qe_tcb_status(&self, isv_svn: u16) -> QeTcbStatus {
+        self.tcb_levels
+            .iter()
+            .find(|level| level.tcb.isvsvn <= isv_svn)
+            .map(|level| level.tcb_status.clone())
+            .unwrap_or(QeTcbStatus::Unspecified)
+    }
+}
+
+/// Enclave TCB level
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct EnclaveIdentityV2TcbLevelItem {
-    pub tcb: EnclaveIdentityV2TcbLevel,
-    pub tcb_date: String,
-    pub tcb_status: String,
-    #[serde(rename(serialize = "advisoryIDs", deserialize = "advisoryIDs"))]
+pub struct QeTcbLevel {
+    /// SGX Enclave's ISV SVN
+    tcb: QeTcb,
+    /// The time the TCB was evaluated. The time shall be in UTC and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
+    _tcb_date: chrono::DateTime<Utc>,
+    /// TCB level status
+    tcb_status: QeTcbStatus,
+    #[serde(rename = "advisoryIDs")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub advisory_ids: Option<Vec<String>>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EnclaveIdentityV2TcbLevel {
-    pub isvsvn: u16,
+/// TCB level status
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub enum QeTcbStatus {
+    /// TCB level of the SGX platform is up-to-date.
+    UpToDate,
+    /// TCB level of SGX platform requires SW hardening.
+    SWHardeningNeeded,
+    /// TCB level of SGX platform is outdated.
+    OutOfDate,
+    /// TCB level of SGX platform is outdated and requires a configuration change.
+    OutOfDateConfigurationNeeded,
+    /// TCB level of SGX platform is outdated and requires a configuration change.
+    ConfigurationNeeded,
+    /// TCB level of SGX platform is outdated and requires a configuration change and SW hardening.
+    ConfigurationAndSWHardeningNeeded,
+    /// TCB level of SGX platform is revoked.
+    Revoked,
+    /// Unknown TCB level status.
+    Unspecified,
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<TcbStatus> for QeTcbStatus {
+    fn into(self) -> TcbStatus {
+        match self {
+            QeTcbStatus::UpToDate => TcbStatus::UpToDate,
+            QeTcbStatus::OutOfDate => TcbStatus::OutOfDate,
+            QeTcbStatus::Revoked => TcbStatus::Revoked,
+            QeTcbStatus::ConfigurationNeeded => TcbStatus::ConfigurationNeeded,
+            QeTcbStatus::ConfigurationAndSWHardeningNeeded => {
+                TcbStatus::ConfigurationAndSWHardeningNeeded
+            },
+            QeTcbStatus::SWHardeningNeeded => TcbStatus::SWHardeningNeeded,
+            QeTcbStatus::OutOfDateConfigurationNeeded => TcbStatus::OutOfDateConfigurationNeeded,
+            QeTcbStatus::Unspecified => TcbStatus::Unspecified,
+        }
+    }
+}
+
+impl std::str::FromStr for QeTcbStatus {
+    type Err = anyhow::Error;
+
+    fn from_str(status: &str) -> Result<Self, Self::Err> {
+        match status {
+            "UpToDate" => Ok(QeTcbStatus::UpToDate),
+            "OutOfDate" => Ok(QeTcbStatus::OutOfDate),
+            "Revoked" => Ok(QeTcbStatus::Revoked),
+            _ => Ok(QeTcbStatus::Unspecified),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum EnclaveType {
+    /// Quoting Enclave
+    Qe,
+    /// Quote Verification Enclave
+    Qve,
+    /// TDX Quoting Enclave
+    #[serde(rename = "TD_QE")]
+    TdQe,
 }
