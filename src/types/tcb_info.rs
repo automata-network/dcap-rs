@@ -223,6 +223,11 @@ impl TcbInfo {
             _ => platform_status,
         }
     }
+
+    pub fn from_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
+        borsh::from_slice::<TcbInfo>(bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to parse TcbInfo: {}", e))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
