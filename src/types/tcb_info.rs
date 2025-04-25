@@ -308,9 +308,13 @@ pub struct TcbV3 {
     pcesvn: u16,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, Copy, BorshSerialize, BorshDeserialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TcbComponentV3 {
     svn: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "type")]
+    tcb_type: Option<String>
 }
 
 
@@ -363,14 +367,28 @@ impl Tcb {
                 v2.sgxtcbcomp15svn,
                 v2.sgxtcbcomp16svn,
             ],
-            Self::V3(v3) => v3.sgxtcbcomponents.map(|comp| comp.svn),
+            Self::V3(v3) => {
+                let mut result = [0u8; 16];
+                for i in 0..16 {
+                    result[i] = v3.sgxtcbcomponents[i].svn;
+                }
+                result
+            },
         }
     }
 
     pub fn tdx_tcb_components(&self) -> Option<[u8; 16]> {
         match self {
             Self::V2(_) => None,
-            Self::V3(v3) => v3.tdxtcbcomponents.map(|components| components.map(|comp| comp.svn)),
+            Self::V3(v3) => {
+                v3.tdxtcbcomponents.as_ref().map(|components| {
+                    let mut result = [0u8; 16];
+                    for i in 0..16 {
+                        result[i] = components[i].svn;
+                    }
+                    result
+                })
+            },
         }
     }
 }
