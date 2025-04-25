@@ -158,14 +158,18 @@ impl TcbInfo {
             (&tdx_module.mrsigner, &tdx_module.attributes)
         };
 
+        // Convert mrsigner and attributes to the appropriate type
+        let mrsigner_bytes: [u8; 48] = hex::decode(mrsigner).unwrap().try_into().unwrap();
+        let attributes_bytes: [u8; 8] = hex::decode(attributes).unwrap().try_into().unwrap();
+
         // Check for mismatches with a single validation
-        if mrsigner != &quote_body.mr_signer_seam {
+        if mrsigner_bytes != quote_body.mr_signer_seam {
             return Err(anyhow::anyhow!(
                 "mrsigner mismatch between tdx module identity and tdx quote body"
             ));
         }
 
-        if attributes != &quote_body.seam_attributes {
+        if attributes_bytes != quote_body.seam_attributes {
             return Err(anyhow::anyhow!(
                 "attributes mismatch between tdx module identity and tdx quote body"
             ));
@@ -374,12 +378,10 @@ impl Tcb {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TdxModule {
-    #[serde(with = "hex", rename = "mrsigner")]
-    mrsigner: [u8; 48],
-    #[serde(with = "hex")]
-    attributes: [u8; 8],
-    #[serde(with = "hex")]
-    attributes_mask: [u8; 8],
+    #[serde(rename = "mrsigner")]
+    mrsigner: String,
+    attributes: String,
+    attributes_mask: String,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
@@ -387,12 +389,10 @@ pub struct TdxModule {
 pub struct TdxModuleIdentity {
     #[serde(rename = "id")]
     id: String,
-    #[serde(with = "hex", rename = "mrsigner")]
-    mrsigner: [u8; 48],
-    #[serde(with = "hex")]
-    attributes: [u8; 8],
-    #[serde(with = "hex")]
-    attributes_mask: [u8; 8],
+    #[serde(rename = "mrsigner")]
+    mrsigner: String,
+    attributes: String,
+    attributes_mask: String,
     tcb_levels: Vec<TdxTcbLevel>,
 }
 
