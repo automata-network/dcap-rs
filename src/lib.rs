@@ -41,7 +41,8 @@ pub fn verify_dcap_quote(
 
     // 3. Verify the status of Intel SGX TCB described in the chain.
     let pck_extension = quote.signature.get_pck_extension()?;
-    let (sgx_tcb_status, tdx_tcb_status, advisory_ids) = verify_tcb_status(&tcb_info, &pck_extension, &quote)?;
+    let (sgx_tcb_status, tdx_tcb_status, advisory_ids) =
+        verify_tcb_status(&tcb_info, &pck_extension, &quote)?;
 
     assert!(
         sgx_tcb_status != TcbStatus::Revoked || tdx_tcb_status != TcbStatus::Revoked,
@@ -77,8 +78,6 @@ pub fn verify_dcap_quote(
         advisory_ids,
     })
 }
-
-
 
 fn verify_integrity(
     current_time: SystemTime,
@@ -198,7 +197,6 @@ pub fn verify_quote_enclave_source(
     collateral: &Collateral,
     quote: &Quote,
 ) -> anyhow::Result<QeTcbStatus> {
-
     // Verify that the enclave identity root is signed by root certificate
     let qe_identity = collateral
         .qe_identity
@@ -331,7 +329,18 @@ pub fn verify_tcb_status(
     quote: &Quote,
 ) -> anyhow::Result<(TcbStatus, TcbStatus, Vec<String>)> {
     // Make sure the tcb_info matches the enclave's model/PCE version
-    if pck_extension.fmspc != tcb_info.fmspc {
+
+    let tcb_info_fmspc_bytes: [u8; 6] = hex::decode(tcb_info.fmspc.as_str())
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+    let tcb_info_pce_id_bytes: [u8; 2] = hex::decode(tcb_info.pce_id.as_str())
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+    if pck_extension.fmspc != tcb_info_fmspc_bytes {
         return Err(anyhow::anyhow!(
             "tcb fmspc mismatch (pck extension: {:?}, tcb_info: {:?})",
             pck_extension.fmspc,
@@ -339,7 +348,7 @@ pub fn verify_tcb_status(
         ));
     }
 
-    if pck_extension.pceid != tcb_info.pce_id {
+    if pck_extension.pceid != tcb_info_pce_id_bytes {
         return Err(anyhow::anyhow!(
             "tcb pceid mismatch (pck extension: {:?}, tcb_info: {:?})",
             pck_extension.pceid,
