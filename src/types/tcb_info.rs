@@ -303,9 +303,9 @@ impl Tcb {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TcbV3 {
     sgxtcbcomponents: [TcbComponentV3; 16],
+    pcesvn: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     tdxtcbcomponents: Option<[TcbComponentV3; 16]>,
-    pcesvn: u16,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
