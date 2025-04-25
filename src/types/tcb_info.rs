@@ -112,12 +112,10 @@ pub struct TcbInfo {
     pub issue_date: chrono::DateTime<Utc>,
     #[borsh(deserialize_with = "borsh_datetime_as_instant::deserialize", serialize_with = "borsh_datetime_as_instant::serialize")]
     pub next_update: chrono::DateTime<Utc>,
-    #[serde(with = "hex")]
-    pub fmspc: [u8; 6],
-    #[serde(with = "hex")]
-    pub pce_id: [u8; 2],
-    pub tcb_type: u16,
-    pub tcb_evaluation_data_number: u16,
+    pub fmspc: String,
+    pub pce_id: String,
+    tcb_type: u16,
+    _tcb_evaluation_data_number: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tdx_module: Option<TdxModule>,
     #[serde(skip_serializing_if = "Option::is_none")]
