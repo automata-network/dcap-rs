@@ -78,7 +78,7 @@ impl TcbInfoAndSignature {
 /// the TcbLevel
 
 #[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
-#[serde(try_from = "u16")]
+#[serde(try_from = "u16", into = "u16")]
 #[borsh(use_discriminant = true)]
 pub enum TcbInfoVersion {
     V2 = 2,
@@ -93,6 +93,12 @@ impl TryFrom<u16> for TcbInfoVersion {
             3 => Ok(TcbInfoVersion::V3),
             _ => Err("Unsupported TCB Info version"),
         }
+    }
+}
+
+impl From<TcbInfoVersion> for u16 {
+    fn from(value: TcbInfoVersion) -> Self {
+        value as u16
     }
 }
 
