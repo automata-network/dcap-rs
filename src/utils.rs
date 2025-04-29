@@ -1,4 +1,5 @@
 use std::time::SystemTime;
+use std::io::Write;
 
 use x509_cert::{certificate::CertificateInner, crl::CertificateList};
 
@@ -304,4 +305,28 @@ pub fn read_bytes<'a>(bytes: &mut &'a [u8], size: usize) -> &'a [u8] {
     let (front, rest) = bytes.split_at(size);
     *bytes = rest;
     front
+}
+
+/// A writer that updates a hasher as it receives data
+/// 
+/// This is used for incremental serialization and hashing to minimize memory usage.
+pub struct HashingWriter<'a, H> {
+    hasher: &'a mut H,
+}
+
+impl<'a, H: sha2::Digest> HashingWriter<'a, H> {
+    pub fn new(hasher: &'a mut H) -> Self {
+        Self { hasher }
+    }
+}
+
+impl<'a, H: sha2::Digest> Write for HashingWriter<'a, H> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.hasher.update(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }

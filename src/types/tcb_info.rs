@@ -7,7 +7,8 @@ use p256::ecdsa::signature::Verifier;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use borsh::{BorshDeserialize, BorshSerialize};
-use crate::utils::borsh_datetime_as_instant;
+use sha2::{Sha256, Digest};
+use crate::utils::{borsh_datetime_as_instant, HashingWriter};
 
 use super::{quote::{Quote, QuoteBody}, report::Td10ReportBody, sgx_x509::SgxPckExtension};
 
@@ -240,6 +241,25 @@ impl TcbInfo {
     pub fn to_borsh_bytes(&self) -> anyhow::Result<Vec<u8>> {
         borsh::to_vec(self)
             .map_err(|e| anyhow::anyhow!("Failed to serialize TcbInfo: {}", e))
+    }
+
+    /// Compute SHA256 hash of the JSON representation without storing the entire JSON
+    ///
+    /// This method serializes the TcbInfo object incrementally to a hasher,
+    /// minimizing stack and heap usage by avoiding storing the complete JSON string.
+    pub fn compute_json_hash(&self) -> anyhow::Result<[u8; 32]> {
+        let mut hasher = Sha256::new();
+        
+        // Create a writer that feeds directly to the hasher
+        let mut writer = HashingWriter::new(&mut hasher);
+        
+        // Serialize directly to the writer
+        let mut serializer = serde_json::Serializer::new(&mut writer);
+        serde::Serialize::serialize(self, &mut serializer)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize TcbInfo: {}", e))?;
+        
+        // Return the final hash
+        Ok(hasher.finalize().into())
     }
 }
 
@@ -515,6 +535,53 @@ impl TcbStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_incremental_json_hash() {
+        // Load a TcbInfo from a test file
+        let json = include_str!("../../data/tcb_info_v2.json");
+        let tcb_info_and_signature: TcbInfoAndSignature = serde_json::from_str(json).unwrap();
+        let tcb_info = tcb_info_and_signature.get_tcb_info().unwrap();
+        
+        // Compute hash using our incremental method
+        let incremental_hash = tcb_info.compute_json_hash().unwrap();
+        
+        // Compute hash using the traditional method (serialize to string then hash)
+        let json_string = serde_json::to_string(&tcb_info).unwrap();
+        let mut traditional_hasher = Sha256::new();
+        traditional_hasher.update(json_string.as_bytes());
+        let traditional_hash = traditional_hasher.finalize();
+        
+        // The hashes should match
+        assert_eq!(incremental_hash, <[u8; 32]>::from(traditional_hash));
+    }
+    
+    #[test]
+    fn test_borsh_deserialize_and_hash_json() {
+        // Load a TcbInfo from a test file
+        let json = include_str!("../../data/tcb_info_v2.json");
+        let tcb_info_and_signature: TcbInfoAndSignature = serde_json::from_str(json).unwrap();
+        let original_tcb_info = tcb_info_and_signature.get_tcb_info().unwrap();
+        
+        // Serialize to Borsh format
+        let borsh_bytes = borsh::to_vec(&original_tcb_info).unwrap();
+        
+        // Use our incremental method to deserialize and hash
+        let deserialized_tcb_info = TcbInfo::from_borsh_bytes(&borsh_bytes).unwrap();
+        let incremental_hash = deserialized_tcb_info.compute_json_hash().unwrap();
+        
+        // Verify the deserialized object matches the original
+        assert_eq!(original_tcb_info, deserialized_tcb_info);
+        
+        // Compute hash using the traditional method for comparison
+        let json_string = serde_json::to_string(&original_tcb_info).unwrap();
+        let mut traditional_hasher = Sha256::new();
+        traditional_hasher.update(json_string.as_bytes());
+        let traditional_hash = traditional_hasher.finalize();
+        
+        // The hashes should match
+        assert_eq!(incremental_hash, <[u8; 32]>::from(traditional_hash));
+    }
 
     #[test]
     fn test_parsing_tcb_info_without_tdx_module() {
