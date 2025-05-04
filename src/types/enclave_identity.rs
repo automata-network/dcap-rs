@@ -20,9 +20,9 @@ pub struct QeTcb {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct QuotingEnclaveIdentityAndSignature {
     #[serde(rename = "enclaveIdentity")]
-    enclave_identity_raw: Box<RawValue>,
+    pub enclave_identity_raw: Box<RawValue>,
     #[serde(with = "hex")]
-    signature: Vec<u8>,
+    pub signature: Vec<u8>,
 }
 
 impl QuotingEnclaveIdentityAndSignature {

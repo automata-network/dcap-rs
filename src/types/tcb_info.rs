@@ -14,9 +14,9 @@ use super::{quote::{Quote, QuoteBody}, report::Td10ReportBody, sgx_x509::SgxPckE
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TcbInfoAndSignature {
     #[serde(rename = "tcbInfo")]
-    tcb_info_raw: Box<RawValue>,
+    pub tcb_info_raw: Box<RawValue>,
     #[serde(with = "hex")]
-    signature: Vec<u8>,
+    pub signature: Vec<u8>,
 }
 
 impl TryFrom<String> for TcbInfoAndSignature {
