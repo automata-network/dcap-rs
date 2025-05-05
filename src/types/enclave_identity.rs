@@ -129,6 +129,16 @@ impl EnclaveIdentity {
             .map(|level| level.tcb_status.clone())
             .unwrap_or(QeTcbStatus::Unspecified)
     }
+
+    pub fn from_borsh_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
+        borsh::from_slice::<EnclaveIdentity>(bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize enclave identity: {}", e))
+    }
+
+    pub fn to_borsh_bytes(&self) -> anyhow::Result<Vec<u8>> {
+        borsh::to_vec(self)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize enclave identity: {}", e))
+    }
 }
 
 /// Enclave TCB level
