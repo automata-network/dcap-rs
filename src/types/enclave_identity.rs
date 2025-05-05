@@ -11,7 +11,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 const ENCLAVE_IDENTITY_V2: u16 = 2;
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QeTcb {
     pub isvsvn: u16,
@@ -66,7 +66,7 @@ impl QuotingEnclaveIdentityAndSignature {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, BorshDeserialize, BorshSerialize)]
+#[derive(Deserialize, Serialize, Debug, BorshDeserialize, BorshSerialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EnclaveIdentity {
     /// Identifier of the SGX Enclave issued by Intel.
@@ -142,7 +142,7 @@ impl EnclaveIdentity {
 }
 
 /// Enclave TCB level
-#[derive(Deserialize, Serialize, Debug, BorshDeserialize, BorshSerialize)]
+#[derive(Deserialize, Serialize, Debug, BorshDeserialize, BorshSerialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct QeTcbLevel {
     /// SGX Enclave's ISV SVN
@@ -158,7 +158,7 @@ pub struct QeTcbLevel {
 }
 
 /// TCB level status
-#[derive(Deserialize, Serialize, Debug, Clone, BorshDeserialize, BorshSerialize)]
+#[derive(Deserialize, Serialize, Debug, Clone, BorshDeserialize, BorshSerialize, Eq, PartialEq)]
 pub enum QeTcbStatus {
     /// TCB level of the SGX platform is up-to-date.
     UpToDate,
@@ -224,7 +224,7 @@ impl std::str::FromStr for QeTcbStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum EnclaveType {
     /// Quoting Enclave
