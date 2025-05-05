@@ -90,7 +90,7 @@ pub struct EnclaveIdentity {
     /// flavours of SGX CPUs (Family-Model-Stepping-Platform-CustomSKU) and QE/QVE Identity.
     /// This sequence number allows users to easily determine when a particular TCB Info/QE Identity/QVE Identity
     /// superseedes another TCB Info/QE Identity/QVE Identity (value: current TCB Recovery event number stored in the database).
-    _tcb_evaluation_data_number: u16,
+    pub tcb_evaluation_data_number: u16,
 
     /// Base 16-encoded string representing miscselect "golden" value (upon applying mask).
     #[serde(with = "u32_hex")]

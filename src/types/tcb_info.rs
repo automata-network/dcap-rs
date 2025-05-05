@@ -80,7 +80,7 @@ impl TcbInfoAndSignature {
 #[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 #[serde(try_from = "u16")]
 #[borsh(use_discriminant = true)]
-pub(crate) enum TcbInfoVersion {
+pub enum TcbInfoVersion {
     V2 = 2,
     V3 = 3,
 }
@@ -100,8 +100,8 @@ impl TryFrom<u16> for TcbInfoVersion {
 #[serde(rename_all = "camelCase")]
 pub struct TcbInfo {
     #[serde(skip_serializing_if = "Option::is_none", rename = "id")]
-    id: Option<String>,
-    version: TcbInfoVersion,
+    pub id: Option<String>,
+    pub version: TcbInfoVersion,
     #[borsh(deserialize_with = "borsh_datetime_as_instant::deserialize", serialize_with = "borsh_datetime_as_instant::serialize")]
     pub issue_date: chrono::DateTime<Utc>,
     #[borsh(deserialize_with = "borsh_datetime_as_instant::deserialize", serialize_with = "borsh_datetime_as_instant::serialize")]
@@ -110,13 +110,13 @@ pub struct TcbInfo {
     pub fmspc: [u8; 6],
     #[serde(with = "hex")]
     pub pce_id: [u8; 2],
-    tcb_type: u16,
-    _tcb_evaluation_data_number: u16,
+    pub tcb_type: u16,
+    pub tcb_evaluation_data_number: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tdx_module: Option<TdxModule>,
+    pub tdx_module: Option<TdxModule>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tdx_module_identities: Option<Vec<TdxModuleIdentity>>,
-    tcb_levels: Vec<TcbLevel>,
+    pub tdx_module_identities: Option<Vec<TdxModuleIdentity>>,
+    pub tcb_levels: Vec<TcbLevel>,
 }
 
 impl TcbInfo {
