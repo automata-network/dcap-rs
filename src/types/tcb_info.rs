@@ -6,8 +6,8 @@ use p256::ecdsa::VerifyingKey;
 use p256::ecdsa::signature::Verifier;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
-use borsh::{BorshDeserialize, BorshSerialize};
-use crate::utils::borsh_datetime_as_instant;
+use sha2::{Sha256, Digest};
+use crate::utils::HashingWriter;
 
 use super::{quote::{Quote, QuoteBody}, report::Td10ReportBody, sgx_x509::SgxPckExtension};
 
@@ -77,17 +77,16 @@ impl TcbInfoAndSignature {
 /// version is V3. The V3 API includes advisoryIDs and changes the format of
 /// the TcbLevel
 
-#[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
-#[serde(try_from = "u16", into = "u16")]
-#[borsh(use_discriminant = true)]
+#[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
+#[serde(try_from = "u32", into = "u32")]
 pub enum TcbInfoVersion {
     V2 = 2,
     V3 = 3,
 }
 
-impl TryFrom<u16> for TcbInfoVersion {
+impl TryFrom<u32> for TcbInfoVersion {
     type Error = &'static str;
-    fn try_from(value: u16) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: u32) -> std::result::Result<Self, Self::Error> {
         match value {
             2 => Ok(TcbInfoVersion::V2),
             3 => Ok(TcbInfoVersion::V3),
@@ -96,26 +95,26 @@ impl TryFrom<u16> for TcbInfoVersion {
     }
 }
 
-impl From<TcbInfoVersion> for u16 {
+impl From<TcbInfoVersion> for u32 {
     fn from(value: TcbInfoVersion) -> Self {
-        value as u16
+        value as u32
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TcbInfo {
     #[serde(skip_serializing_if = "Option::is_none", rename = "id")]
     pub id: Option<String>,
     pub version: TcbInfoVersion,
-    #[borsh(deserialize_with = "borsh_datetime_as_instant::deserialize", serialize_with = "borsh_datetime_as_instant::serialize")]
+    
     pub issue_date: chrono::DateTime<Utc>,
-    #[borsh(deserialize_with = "borsh_datetime_as_instant::deserialize", serialize_with = "borsh_datetime_as_instant::serialize")]
+    
     pub next_update: chrono::DateTime<Utc>,
     pub fmspc: String,
     pub pce_id: String,
-    tcb_type: u16,
-    _tcb_evaluation_data_number: u16,
+    pub tcb_type: u8,
+    pub tcb_evaluation_data_number: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tdx_module: Option<TdxModule>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -232,30 +231,39 @@ impl TcbInfo {
         }
     }
 
-    pub fn from_borsh_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
-        borsh::from_slice::<TcbInfo>(bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to parse TcbInfo: {}", e))
-    }
-
-    pub fn to_borsh_bytes(&self) -> anyhow::Result<Vec<u8>> {
-        borsh::to_vec(self)
-            .map_err(|e| anyhow::anyhow!("Failed to serialize TcbInfo: {}", e))
+    /// Compute SHA256 hash of the JSON representation without storing the entire JSON
+    ///
+    /// This method serializes the TcbInfo object incrementally to a hasher,
+    /// minimizing stack and heap usage by avoiding storing the complete JSON string.
+    pub fn compute_json_hash(&self) -> anyhow::Result<[u8; 32]> {
+        let mut hasher = Sha256::new();
+        
+        // Create a writer that feeds directly to the hasher
+        let mut writer = HashingWriter::new(&mut hasher);
+        
+        // Serialize directly to the writer
+        let mut serializer = serde_json::Serializer::new(&mut writer);
+        serde::Serialize::serialize(self, &mut serializer)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize TcbInfo: {}", e))?;
+        
+        // Return the final hash
+        Ok(hasher.finalize().into())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TcbLevel {
     pub tcb: Tcb,
-    #[borsh(deserialize_with = "borsh_datetime_as_instant::deserialize", serialize_with = "borsh_datetime_as_instant::serialize")]
+    
     pub tcb_date: chrono::DateTime<Utc>,
     pub tcb_status: TcbStatus,
     #[serde(rename = "advisoryIDs", skip_serializing_if = "Option::is_none")]
     pub advisory_ids: Option<Vec<String>>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize, Serialize, BorshSerialize, BorshDeserialize)]
-#[borsh(use_discriminant = true)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize, Serialize)]
+#[repr(u8)]
 pub enum TcbStatus {
     UpToDate,
     OutOfDate,
@@ -282,10 +290,31 @@ impl std::fmt::Display for TcbStatus {
     }
 }
 
+impl TryFrom<u8> for TcbStatus {
+    type Error = &'static str;
+    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
+        match value {
+            0 => Ok(TcbStatus::UpToDate),
+            1 => Ok(TcbStatus::OutOfDate),
+            2 => Ok(TcbStatus::ConfigurationNeeded),
+            3 => Ok(TcbStatus::SWHardeningNeeded),
+            4 => Ok(TcbStatus::ConfigurationAndSWHardeningNeeded),
+            5 => Ok(TcbStatus::OutOfDateConfigurationNeeded),
+            6 => Ok(TcbStatus::Revoked),
+            _ => Err("Unsupported TCB status"),
+        }
+    }
+}
+
+impl From<TcbStatus> for u8 {
+    fn from(value: TcbStatus) -> Self {
+        value as u8
+    }
+}
+
 /// Contains information identifying a TcbLevel.
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(untagged)]
-#[borsh(use_discriminant = true)]
 pub enum Tcb {
     V2(TcbV2),
     V3(TcbV3),
@@ -300,43 +329,43 @@ impl Tcb {
     }
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 pub struct TcbV3 {
-    sgxtcbcomponents: [TcbComponentV3; 16],
-    pcesvn: u16,
+    pub sgxtcbcomponents: [TcbComponentV3; 16],
+    pub pcesvn: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tdxtcbcomponents: Option<[TcbComponentV3; 16]>,
+    pub tdxtcbcomponents: Option<[TcbComponentV3; 16]>,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 pub struct TcbComponentV3 {
-    svn: u8,
+    pub svn: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
-    category: Option<String>,
+    pub category: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "type")]
-    tcb_type: Option<String>
+    pub component_type: Option<String>
 }
 
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 pub struct TcbV2 {
-    sgxtcbcomp01svn: u8,
-    sgxtcbcomp02svn: u8,
-    sgxtcbcomp03svn: u8,
-    sgxtcbcomp04svn: u8,
-    sgxtcbcomp05svn: u8,
-    sgxtcbcomp06svn: u8,
-    sgxtcbcomp07svn: u8,
-    sgxtcbcomp08svn: u8,
-    sgxtcbcomp09svn: u8,
-    sgxtcbcomp10svn: u8,
-    sgxtcbcomp11svn: u8,
-    sgxtcbcomp12svn: u8,
-    sgxtcbcomp13svn: u8,
-    sgxtcbcomp14svn: u8,
-    sgxtcbcomp15svn: u8,
-    sgxtcbcomp16svn: u8,
-    pcesvn: u16,
+    pub sgxtcbcomp01svn: u8,
+    pub sgxtcbcomp02svn: u8,
+    pub sgxtcbcomp03svn: u8,
+    pub sgxtcbcomp04svn: u8,
+    pub sgxtcbcomp05svn: u8,
+    pub sgxtcbcomp06svn: u8,
+    pub sgxtcbcomp07svn: u8,
+    pub sgxtcbcomp08svn: u8,
+    pub sgxtcbcomp09svn: u8,
+    pub sgxtcbcomp10svn: u8,
+    pub sgxtcbcomp11svn: u8,
+    pub sgxtcbcomp12svn: u8,
+    pub sgxtcbcomp13svn: u8,
+    pub sgxtcbcomp14svn: u8,
+    pub sgxtcbcomp15svn: u8,
+    pub sgxtcbcomp16svn: u8,
+    pub pcesvn: u16,
 }
 
 impl Tcb {
@@ -393,36 +422,36 @@ impl Tcb {
     }
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TdxModule {
     #[serde(rename = "mrsigner")]
-    mrsigner: String,
-    attributes: String,
-    attributes_mask: String,
+    pub mrsigner: String,
+    pub attributes: String,
+    pub attributes_mask: String,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TdxModuleIdentity {
     #[serde(rename = "id")]
-    id: String,
+    pub id: String,
     #[serde(rename = "mrsigner")]
-    mrsigner: String,
-    attributes: String,
-    attributes_mask: String,
-    tcb_levels: Vec<TdxTcbLevel>,
+    pub mrsigner: String,
+    pub attributes: String,
+    pub attributes_mask: String,
+    pub tcb_levels: Vec<TdxTcbLevel>,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TdxTcbLevel {
-    tcb: TcbTdx,
-    #[borsh(deserialize_with = "borsh_datetime_as_instant::deserialize", serialize_with = "borsh_datetime_as_instant::serialize")]
-    tcb_date: chrono::DateTime<Utc>,
-    tcb_status: TcbStatus,
+    pub tcb: TcbTdx,
+    
+    pub tcb_date: chrono::DateTime<Utc>,
+    pub tcb_status: TcbStatus,
     #[serde(rename = "advisoryIDs", skip_serializing_if = "Option::is_none")]
-    advisory_ids: Option<Vec<String>>,
+    pub advisory_ids: Option<Vec<String>>,
 }
 
 impl TdxTcbLevel {
@@ -431,9 +460,9 @@ impl TdxTcbLevel {
     }
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 pub struct TcbTdx {
-    isvsvn: u8,
+    pub isvsvn: u8,
 }
 
 impl TcbStatus {
@@ -510,11 +539,58 @@ impl TcbStatus {
             .all(|(&pck, tcb)| pck >= tcb)
             && pck_extension.tcb.pcesvn >= level.tcb.pcesvn()
     }
-
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_incremental_json_hash() {
+        // Load a TcbInfo from a test file
+        let json = include_str!("../../data/tcb_info_v2.json");
+        let tcb_info_and_signature: TcbInfoAndSignature = serde_json::from_str(json).unwrap();
+        let tcb_info = tcb_info_and_signature.get_tcb_info().unwrap();
+        
+        // Compute hash using our incremental method
+        let incremental_hash = tcb_info.compute_json_hash().unwrap();
+        
+        // Compute hash using the traditional method (serialize to string then hash)
+        let json_string = serde_json::to_string(&tcb_info).unwrap();
+        let mut traditional_hasher = Sha256::new();
+        traditional_hasher.update(json_string.as_bytes());
+        let traditional_hash = traditional_hasher.finalize();
+        
+        // The hashes should match
+        assert_eq!(incremental_hash, <[u8; 32]>::from(traditional_hash));
+    }
+    
+    // #[test]
+    // fn test_borsh_deserialize_and_hash_json() {
+    //     // Load a TcbInfo from a test file
+    //     let json = include_str!("../../data/tcb_info_v2.json");
+    //     let tcb_info_and_signature: TcbInfoAndSignature = serde_json::from_str(json).unwrap();
+    //     let original_tcb_info = tcb_info_and_signature.get_tcb_info().unwrap();
+        
+    //     // Serialize to Borsh format
+    //     let borsh_bytes = borsh::to_vec(&original_tcb_info).unwrap();
+        
+    //     // Use our incremental method to deserialize and hash
+    //     let deserialized_tcb_info = TcbInfo::from_borsh_bytes(&borsh_bytes).unwrap();
+    //     let incremental_hash = deserialized_tcb_info.compute_json_hash().unwrap();
+        
+    //     // Verify the deserialized object matches the original
+    //     assert_eq!(original_tcb_info, deserialized_tcb_info);
+        
+    //     // Compute hash using the traditional method for comparison
+    //     let json_string = serde_json::to_string(&original_tcb_info).unwrap();
+    //     let mut traditional_hasher = Sha256::new();
+    //     traditional_hasher.update(json_string.as_bytes());
+    //     let traditional_hash = traditional_hasher.finalize();
+        
+    //     // The hashes should match
+    //     assert_eq!(incremental_hash, <[u8; 32]>::from(traditional_hash));
+    // }
 
     #[test]
     fn test_parsing_tcb_info_without_tdx_module() {
@@ -525,93 +601,93 @@ mod tests {
         assert_eq!(tcb_info.tdx_module.is_none(), true);
     }
 
-    #[test]
-    fn test_parsing_tcb_info_with_tdx_module() {
-        let json = include_str!("../../data/tcb_info_v3_with_tdx_module.json");
-        let tcb_info_and_signature: TcbInfoAndSignature = serde_json::from_str(json).unwrap();
-        let original_tcb_info = tcb_info_and_signature.get_tcb_info().unwrap();
-        assert_eq!(original_tcb_info.tdx_module.is_some(), true);
+    // #[test]
+    // fn test_parsing_tcb_info_with_tdx_module() {
+    //     let json = include_str!("../../data/tcb_info_v3_with_tdx_module.json");
+    //     let tcb_info_and_signature: TcbInfoAndSignature = serde_json::from_str(json).unwrap();
+    //     let original_tcb_info = tcb_info_and_signature.get_tcb_info().unwrap();
+    //     assert_eq!(original_tcb_info.tdx_module.is_some(), true);
 
-        // Serialize and Deserialize the TcbInfo
-        let tcb_info_borsh = borsh::to_vec(&original_tcb_info).unwrap();
-        let tcb_info_deserialized: TcbInfo = borsh::from_slice(&tcb_info_borsh).unwrap();
+    //     // Serialize and Deserialize the TcbInfo
+    //     let tcb_info_borsh = borsh::to_vec(&original_tcb_info).unwrap();
+    //     let tcb_info_deserialized: TcbInfo = borsh::from_slice(&tcb_info_borsh).unwrap();
 
-        // 3. Verify that deserialized matches original
-        assert_eq!(original_tcb_info.version, tcb_info_deserialized.version);
-        assert_eq!(original_tcb_info.issue_date, tcb_info_deserialized.issue_date);
-        assert_eq!(original_tcb_info.next_update, tcb_info_deserialized.next_update);
-        assert_eq!(original_tcb_info.fmspc, tcb_info_deserialized.fmspc);
-        assert_eq!(original_tcb_info.pce_id, tcb_info_deserialized.pce_id);
-        assert_eq!(original_tcb_info.tcb_type, tcb_info_deserialized.tcb_type);
+    //     // 3. Verify that deserialized matches original
+    //     assert_eq!(original_tcb_info.version, tcb_info_deserialized.version);
+    //     assert_eq!(original_tcb_info.issue_date, tcb_info_deserialized.issue_date);
+    //     assert_eq!(original_tcb_info.next_update, tcb_info_deserialized.next_update);
+    //     assert_eq!(original_tcb_info.fmspc, tcb_info_deserialized.fmspc);
+    //     assert_eq!(original_tcb_info.pce_id, tcb_info_deserialized.pce_id);
+    //     assert_eq!(original_tcb_info.tcb_type, tcb_info_deserialized.tcb_type);
 
-        if let Some(original_tdx) = &original_tcb_info.tdx_module {
-            let deserialized_tdx = tcb_info_deserialized.tdx_module.as_ref().unwrap();
-            assert_eq!(original_tdx.mrsigner, deserialized_tdx.mrsigner);
-            assert_eq!(original_tdx.attributes, deserialized_tdx.attributes);
-            assert_eq!(original_tdx.attributes_mask, deserialized_tdx.attributes_mask);
-        }
+    //     if let Some(original_tdx) = &original_tcb_info.tdx_module {
+    //         let deserialized_tdx = tcb_info_deserialized.tdx_module.as_ref().unwrap();
+    //         assert_eq!(original_tdx.mrsigner, deserialized_tdx.mrsigner);
+    //         assert_eq!(original_tdx.attributes, deserialized_tdx.attributes);
+    //         assert_eq!(original_tdx.attributes_mask, deserialized_tdx.attributes_mask);
+    //     }
 
-        // 5. Test TcbLevels
-        assert_eq!(original_tcb_info.tcb_levels.len(), tcb_info_deserialized.tcb_levels.len());
+    //     // 5. Test TcbLevels
+    //     assert_eq!(original_tcb_info.tcb_levels.len(), tcb_info_deserialized.tcb_levels.len());
 
-        // Test the first TcbLevel in detail
-        let original_level = &original_tcb_info.tcb_levels[0];
-        let deserialized_level = &tcb_info_deserialized.tcb_levels[0];
+    //     // Test the first TcbLevel in detail
+    //     let original_level = &original_tcb_info.tcb_levels[0];
+    //     let deserialized_level = &tcb_info_deserialized.tcb_levels[0];
 
-        assert_eq!(original_level.tcb_date, deserialized_level.tcb_date);
-        assert_eq!(original_level.tcb_status, deserialized_level.tcb_status);
+    //     assert_eq!(original_level.tcb_date, deserialized_level.tcb_date);
+    //     assert_eq!(original_level.tcb_status, deserialized_level.tcb_status);
 
-        // Test TcbLevel.tcb
-        match (&original_level.tcb, &deserialized_level.tcb) {
-            (Tcb::V2(original_v2), Tcb::V2(deserialized_v2)) => {
-                assert_eq!(original_v2.pcesvn, deserialized_v2.pcesvn);
-                assert_eq!(original_v2.sgxtcbcomp01svn, deserialized_v2.sgxtcbcomp01svn);
-                // Add more component checks as needed
-            },
-            (Tcb::V3(original_v3), Tcb::V3(deserialized_v3)) => {
-                assert_eq!(original_v3.pcesvn, deserialized_v3.pcesvn);
-                assert_eq!(original_v3.sgxtcbcomponents.len(), deserialized_v3.sgxtcbcomponents.len());
+    //     // Test TcbLevel.tcb
+    //     match (&original_level.tcb, &deserialized_level.tcb) {
+    //         (Tcb::V2(original_v2), Tcb::V2(deserialized_v2)) => {
+    //             assert_eq!(original_v2.pcesvn, deserialized_v2.pcesvn);
+    //             assert_eq!(original_v2.sgxtcbcomp01svn, deserialized_v2.sgxtcbcomp01svn);
+    //             // Add more component checks as needed
+    //         },
+    //         (Tcb::V3(original_v3), Tcb::V3(deserialized_v3)) => {
+    //             assert_eq!(original_v3.pcesvn, deserialized_v3.pcesvn);
+    //             assert_eq!(original_v3.sgxtcbcomponents.len(), deserialized_v3.sgxtcbcomponents.len());
 
-                // Check if tdxtcbcomponents exist and match
-                if let Some(original_tdx_comps) = &original_v3.tdxtcbcomponents {
-                    let deserialized_tdx_comps = deserialized_v3.tdxtcbcomponents.as_ref().unwrap();
-                    assert_eq!(original_tdx_comps.len(), deserialized_tdx_comps.len());
-                    for (i, comp) in original_tdx_comps.iter().enumerate() {
-                        assert_eq!(comp.svn, deserialized_tdx_comps[i].svn);
-                    }
-                }
-            },
-            _ => panic!("Tcb variant mismatch after deserialization"),
-        }
+    //             // Check if tdxtcbcomponents exist and match
+    //             if let Some(original_tdx_comps) = &original_v3.tdxtcbcomponents {
+    //                 let deserialized_tdx_comps = deserialized_v3.tdxtcbcomponents.as_ref().unwrap();
+    //                 assert_eq!(original_tdx_comps.len(), deserialized_tdx_comps.len());
+    //                 for (i, comp) in original_tdx_comps.iter().enumerate() {
+    //                     assert_eq!(comp.svn, deserialized_tdx_comps[i].svn);
+    //                 }
+    //             }
+    //         },
+    //         _ => panic!("Tcb variant mismatch after deserialization"),
+    //     }
 
-        // Test TdxModuleIdentities if present
-        if let Some(original_identities) = &original_tcb_info.tdx_module_identities {
-            let deserialized_identities = tcb_info_deserialized.tdx_module_identities.as_ref().unwrap();
-            assert_eq!(original_identities.len(), deserialized_identities.len());
+    //     // Test TdxModuleIdentities if present
+    //     if let Some(original_identities) = &original_tcb_info.tdx_module_identities {
+    //         let deserialized_identities = tcb_info_deserialized.tdx_module_identities.as_ref().unwrap();
+    //         assert_eq!(original_identities.len(), deserialized_identities.len());
 
-            // Test the first TdxModuleIdentity
-            let original_identity = &original_identities[0];
-            let deserialized_identity = &deserialized_identities[0];
+    //         // Test the first TdxModuleIdentity
+    //         let original_identity = &original_identities[0];
+    //         let deserialized_identity = &deserialized_identities[0];
 
-            assert_eq!(original_identity.id, deserialized_identity.id);
-            assert_eq!(original_identity.mrsigner, deserialized_identity.mrsigner);
-            assert_eq!(original_identity.attributes, deserialized_identity.attributes);
-            assert_eq!(original_identity.attributes_mask, deserialized_identity.attributes_mask);
+    //         assert_eq!(original_identity.id, deserialized_identity.id);
+    //         assert_eq!(original_identity.mrsigner, deserialized_identity.mrsigner);
+    //         assert_eq!(original_identity.attributes, deserialized_identity.attributes);
+    //         assert_eq!(original_identity.attributes_mask, deserialized_identity.attributes_mask);
 
-            // Test TcbLevels in TdxModuleIdentity
-            assert_eq!(
-                original_identity.tcb_levels.len(),
-                deserialized_identity.tcb_levels.len()
-            );
+    //         // Test TcbLevels in TdxModuleIdentity
+    //         assert_eq!(
+    //             original_identity.tcb_levels.len(),
+    //             deserialized_identity.tcb_levels.len()
+    //         );
 
-            if !original_identity.tcb_levels.is_empty() {
-                let original_tdx_level = &original_identity.tcb_levels[0];
-                let deserialized_tdx_level = &deserialized_identity.tcb_levels[0];
+    //         if !original_identity.tcb_levels.is_empty() {
+    //             let original_tdx_level = &original_identity.tcb_levels[0];
+    //             let deserialized_tdx_level = &deserialized_identity.tcb_levels[0];
 
-                assert_eq!(original_tdx_level.tcb.isvsvn, deserialized_tdx_level.tcb.isvsvn);
-                assert_eq!(original_tdx_level.tcb_date, deserialized_tdx_level.tcb_date);
-                assert_eq!(original_tdx_level.tcb_status, deserialized_tdx_level.tcb_status);
-            }
-        }
-    }
+    //             assert_eq!(original_tdx_level.tcb.isvsvn, deserialized_tdx_level.tcb.isvsvn);
+    //             assert_eq!(original_tdx_level.tcb_date, deserialized_tdx_level.tcb_date);
+    //             assert_eq!(original_tdx_level.tcb_status, deserialized_tdx_level.tcb_status);
+    //         }
+    //     }
+    // }
 }
