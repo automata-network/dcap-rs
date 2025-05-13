@@ -7,6 +7,7 @@ pub mod quote;
 pub mod report;
 pub mod sgx_x509;
 pub mod tcb_info;
+pub mod pod;
 
 pub type UInt16LE = zerocopy::little_endian::U16;
 pub type UInt32LE = zerocopy::little_endian::U32;
