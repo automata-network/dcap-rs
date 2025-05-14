@@ -1,11 +1,12 @@
 use quote::QuoteBody;
-use tcb_info::TcbStatus;
 
+#[cfg(not(feature = "zero-copy"))]
 pub mod collateral;
 pub mod enclave_identity;
 pub mod quote;
 pub mod report;
 pub mod sgx_x509;
+#[cfg(not(feature = "zero-copy"))]
 pub mod tcb_info;
 pub mod pod;
 
@@ -21,7 +22,7 @@ pub type UInt64LE = zerocopy::little_endian::U64;
 pub struct VerifiedOutput {
     pub quote_version: u16,
     pub tee_type: u32,
-    pub tcb_status: TcbStatus,
+    pub tcb_status: u8,
     pub fmspc: [u8; 6],
     pub quote_body: QuoteBody,
     pub advisory_ids: Option<Vec<String>>,

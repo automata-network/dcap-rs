@@ -37,3 +37,4 @@ features = [ "std", "p256", "x509" ]
 
 [features]
 default = []
+zero-copy = []

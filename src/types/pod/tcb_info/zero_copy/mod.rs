@@ -4,7 +4,7 @@ pub mod error;
 pub mod structs;
 pub mod iterators;
 
-/// Do not compile this module to Solana BPF
+#[cfg(not(feature = "zero-copy"))]
 pub mod conversion;
 
 pub use error::ZeroCopyError;

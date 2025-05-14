@@ -1,8 +1,9 @@
 use bytemuck::{Pod, Zeroable};
 
+#[cfg(not(feature = "zero-copy"))]
 pub mod serialize;
-pub mod zero_copy; // Changed from views to zero_copy
-#[cfg(test)]
+pub mod zero_copy;
+#[cfg(all(test, not(feature = "zero-copy")))]
 mod tests;
 
 // --- New Header and Data Structs ---

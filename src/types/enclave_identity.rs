@@ -1,10 +1,12 @@
-use super::{UInt32LE, tcb_info::TcbStatus};
+use super::UInt32LE;
 use crate::utils::u32_hex;
 use anyhow::Context;
 use chrono::Utc;
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
+#[cfg(not(feature = "zero-copy"))]
+use super::tcb_info::TcbStatus;
 
 const ENCLAVE_IDENTITY_V2: u16 = 2;
 
@@ -178,6 +180,7 @@ impl std::fmt::Display for QeTcbStatus {
     }
 }
 
+#[cfg(not(feature = "zero-copy"))]
 #[allow(clippy::from_over_into)]
 impl Into<TcbStatus> for QeTcbStatus {
     fn into(self) -> TcbStatus {

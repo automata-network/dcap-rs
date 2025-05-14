@@ -2,23 +2,32 @@ pub mod trust_store;
 pub mod types;
 pub mod utils;
 
+#[cfg(not(feature = "zero-copy"))]
 use std::time::SystemTime;
-
+#[cfg(not(feature = "zero-copy"))]
 use anyhow::{Context, anyhow, bail};
+#[cfg(not(feature = "zero-copy"))]
 use chrono::{DateTime, Utc};
+#[cfg(not(feature = "zero-copy"))]
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
+#[cfg(not(feature = "zero-copy"))]
 use trust_store::{TrustStore, TrustedIdentity};
+#[cfg(not(feature = "zero-copy"))]
 use types::{
     VerifiedOutput,
-    collateral::Collateral,
     enclave_identity::QeTcbStatus,
     quote::{AttestationKeyType, Quote, TDX_TEE_TYPE},
     sgx_x509::SgxPckExtension,
     tcb_info::{TcbInfo, TcbStatus},
+    collateral::Collateral
 };
+#[cfg(not(feature = "zero-copy"))]
 use utils::Expireable;
+#[cfg(not(feature = "zero-copy"))]
 use x509_cert::der::{Any, DecodePem};
+#[cfg(not(feature = "zero-copy"))]
 use x509_verify::VerifyingKey as X509VerifyingKey;
+#[cfg(not(feature = "zero-copy"))]
 use zerocopy::AsBytes;
 
 pub const INTEL_ROOT_CA_PEM: &str = "\
@@ -27,6 +36,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEC6nEwMDIYZOj/iPWsCzaEKi71OiO
 SLRFhWGjbnBVJfVnkY4u3IjkDYYL0MxO4mqsyYjlBalTVYxFP2sJBK5zlA==
 -----END PUBLIC KEY-----";
 
+#[cfg(not(feature = "zero-copy"))]
 pub fn verify_dcap_quote(
     current_time: SystemTime,
     collateral: Collateral,
@@ -72,13 +82,14 @@ pub fn verify_dcap_quote(
     Ok(VerifiedOutput {
         quote_version: quote.header.version.get(),
         tee_type: quote.header.tee_type,
-        tcb_status,
+        tcb_status: tcb_status as u8,
         fmspc: pck_extension.fmspc,
         quote_body: quote.body,
         advisory_ids,
     })
 }
 
+#[cfg(not(feature = "zero-copy"))]
 fn verify_integrity(
     current_time: SystemTime,
     collateral: &Collateral,
@@ -180,6 +191,7 @@ fn verify_integrity(
     Ok(tcb_info)
 }
 
+#[cfg(not(feature = "zero-copy"))]
 fn verify_quote(
     current_time: SystemTime,
     collateral: &Collateral,
@@ -192,6 +204,7 @@ fn verify_quote(
 
 /// Verify the quote enclave source and return the TCB status
 /// of the quoting enclave.
+#[cfg(not(feature = "zero-copy"))]
 pub fn verify_quote_enclave_source(
     current_time: SystemTime,
     collateral: &Collateral,
@@ -274,6 +287,7 @@ pub fn verify_quote_enclave_source(
 }
 
 /// Verify the quote signatures.
+#[cfg(not(feature = "zero-copy"))]
 pub fn verify_quote_signatures(quote: &Quote) -> anyhow::Result<()> {
     let pck_cert_chain_data = quote.signature.get_pck_cert_chain()?;
     let pck_pk_bytes = pck_cert_chain_data.pck_cert_chain[0]
@@ -323,6 +337,7 @@ pub fn verify_quote_signatures(quote: &Quote) -> anyhow::Result<()> {
 
 /// Ensure the latest tcb info is not revoked, and is either up to date or only needs a configuration
 /// change.
+#[cfg(not(feature = "zero-copy"))]
 pub fn verify_tcb_status(
     tcb_info: &TcbInfo,
     pck_extension: &SgxPckExtension,
@@ -359,7 +374,7 @@ pub fn verify_tcb_status(
     TcbStatus::lookup(pck_extension, tcb_info, quote)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "zero-copy")))]
 mod tests {
 
     use std::time::Duration;
@@ -368,10 +383,11 @@ mod tests {
 
     use crate::{
         types::{
-            enclave_identity::QuotingEnclaveIdentityAndSignature, tcb_info::TcbInfoAndSignature,
+            enclave_identity::QuotingEnclaveIdentityAndSignature,
         },
         utils::cert_chain_processor,
     };
+    use crate::types::tcb_info::TcbInfoAndSignature;
 
     use super::*;
 
