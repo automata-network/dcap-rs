@@ -1,4 +1,4 @@
-use super::tcb_info_impl::*;
+use super::serialize::*;
 use super::zero_copy::*;
 use crate::types::tcb_info::*;
 

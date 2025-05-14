@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 
-pub mod tcb_info_impl;
+pub mod serialize;
 pub mod zero_copy; // Changed from views to zero_copy
 #[cfg(test)]
 mod tests;
