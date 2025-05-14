@@ -10,6 +10,9 @@ pub enum ZeroCopyError {
     AlignmentError,
     OutputWouldHaveSlop,
     PodCastError,
+    UnexpectedSgxComponentCount,
+    NoMatchingSgxTcbLevel,
+    MissingTdxComponentsInTcbInfo,
 }
 
 impl ZeroCopyError {
@@ -37,6 +40,9 @@ impl core::fmt::Display for ZeroCopyError {
             ZeroCopyError::AlignmentError => "Input slice is not sufficiently aligned for the target type",
             ZeroCopyError::OutputWouldHaveSlop => "Output slice would have uninitialized trailing padding bytes",
             ZeroCopyError::PodCastError => "A general bytemuck PodCastError occurred",
+            ZeroCopyError::UnexpectedSgxComponentCount => "Unexpected number of SGX TCB components encountered",
+            ZeroCopyError::NoMatchingSgxTcbLevel => "No matching SGX TCB level found for the provided PCK extension",
+            ZeroCopyError::MissingTdxComponentsInTcbInfo => "TDX TCB components missing in TCB Info for a TDX quote",
         };
         write!(f, "{}", msg)
     }

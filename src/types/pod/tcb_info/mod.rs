@@ -1,8 +1,9 @@
 use bytemuck::{Pod, Zeroable};
+pub mod utils;
+pub mod zero_copy;
 
 #[cfg(not(feature = "zero-copy"))]
 pub mod serialize;
-pub mod zero_copy;
 #[cfg(all(test, not(feature = "zero-copy")))]
 mod tests;
 
