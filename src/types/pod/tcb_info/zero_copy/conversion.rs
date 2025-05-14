@@ -3,8 +3,8 @@
 use super::error::ZeroCopyError;
 use super::structs::*;
 use crate::types::tcb_info::{
-    Tcb, TcbComponentV3, TcbInfo, TcbInfoVersion, TcbLevel, TcbTdx, TdxModule, TdxModuleIdentity,
-    TdxTcbLevel,
+    Tcb, TcbComponentV3, TcbInfo, TcbInfoVersion, TcbLevel, TcbStatus, TcbTdx, TdxModule,
+    TdxModuleIdentity, TdxTcbLevel,
 };
 use chrono::{TimeZone, Utc};
 
@@ -78,7 +78,8 @@ pub fn tcb_info_from_zero_copy(view: &TcbInfoZeroCopy) -> Result<TcbInfo, ZeroCo
                             .timestamp_opt(tdx_tcb_level_view.tcb_date_timestamp() as i64, 0)
                             .single()
                             .ok_or(ZeroCopyError::InvalidOffset)?,
-                        tcb_status: tdx_tcb_level_view.tcb_status()?,
+                        tcb_status: TcbStatus::try_from(tdx_tcb_level_view.tcb_status())
+                            .map_err(|_| ZeroCopyError::InvalidEnumValue)?,
                         advisory_ids: if advisory_ids_vec.is_empty() {
                             None
                         } else {
@@ -182,7 +183,8 @@ pub fn tcb_info_from_zero_copy(view: &TcbInfoZeroCopy) -> Result<TcbInfo, ZeroCo
                     .timestamp_opt(tcb_level_view.tcb_date_timestamp() as i64, 0)
                     .single()
                     .ok_or(ZeroCopyError::InvalidOffset)?,
-                tcb_status: tcb_level_view.tcb_status()?,
+                tcb_status: TcbStatus::try_from(tcb_level_view.tcb_status())
+                    .map_err(|_| ZeroCopyError::InvalidEnumValue)?,
                 advisory_ids: if advisory_ids_vec.is_empty() {
                     None
                 } else {

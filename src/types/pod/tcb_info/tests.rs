@@ -105,7 +105,10 @@ fn test_tcb_v2_sgx_bytemuck() {
             view_tcb_level.tcb_date_timestamp(),
             tcb_level.tcb_date.timestamp() as u64
         );
-        assert_eq!(view_tcb_level.tcb_status().unwrap(), tcb_level.tcb_status);
+        assert_eq!(
+            TcbStatus::try_from(view_tcb_level.tcb_status()).unwrap(),
+            tcb_level.tcb_status
+        );
         assert_eq!(
             view_tcb_level.advisory_ids_count(),
             0,
@@ -236,7 +239,10 @@ fn test_tcb_v3_sgx_bytemuck() {
             view_tcb_level.tcb_date_timestamp(),
             tcb_level.tcb_date.timestamp() as u64
         );
-        assert_eq!(view_tcb_level.tcb_status().unwrap(), tcb_level.tcb_status);
+        assert_eq!(
+            TcbStatus::try_from(view_tcb_level.tcb_status()).unwrap(),
+            tcb_level.tcb_status
+        );
         assert_eq!(view_tcb_level.pce_svn(), tcb_level.tcb.pcesvn());
 
         let advisory_ids = tcb_level.advisory_ids.as_ref();
@@ -311,17 +317,27 @@ fn test_tcb_v3_tdx_bytemuck() {
 
     println!("Serialized TCB data size: {}", pod_bytes.len());
 
-    let (parsed_tcb_info, parsed_signature) = parse_tcb_pod_bytes(&pod_bytes)
-        .expect("Parsing TcbPod bytes failed for TcbV3 TDX");
-    assert_eq!(original_tcb_info, parsed_tcb_info, "Round-tripped TcbInfoV3 does not match original");
-    assert_eq!(signature, parsed_signature, "Round-tripped TcbInfoV3 signature does not match original");
+    let (parsed_tcb_info, parsed_signature) =
+        parse_tcb_pod_bytes(&pod_bytes).expect("Parsing TcbPod bytes failed for TcbV3 TDX");
+    assert_eq!(
+        original_tcb_info, parsed_tcb_info,
+        "Round-tripped TcbInfoV3 does not match original"
+    );
+    assert_eq!(
+        signature, parsed_signature,
+        "Round-tripped TcbInfoV3 signature does not match original"
+    );
 
     // Integrity Check
-    let original_tcb_info_hash = Sha256::digest(&tcb_info_and_signature.tcb_info_raw.get().as_bytes());
+    let original_tcb_info_hash =
+        Sha256::digest(&tcb_info_and_signature.tcb_info_raw.get().as_bytes());
     let parsed_tcb_info_string = serde_json::to_string(&parsed_tcb_info)
         .expect("Failed to serialize parsed TcbInfoV3 SGX to JSON string");
     let parsed_tcb_info_hash = Sha256::digest(parsed_tcb_info_string.as_bytes());
-    assert_eq!(original_tcb_info_hash, parsed_tcb_info_hash, "Parsed TcbInfoV2 hash does not match original");
+    assert_eq!(
+        original_tcb_info_hash, parsed_tcb_info_hash,
+        "Parsed TcbInfoV2 hash does not match original"
+    );
 
     // Test ZeroCopy for TcbV3 TDX
     let tcb_info_header_and_payload_bytes = &pod_bytes[64..];
@@ -427,7 +443,10 @@ fn test_tcb_v3_tdx_bytemuck() {
                         view_tcb_level.tcb_date_timestamp(),
                         tcb_level.tcb_date.timestamp() as u64
                     );
-                    assert_eq!(view_tcb_level.tcb_status().unwrap(), tcb_level.tcb_status);
+                    assert_eq!(
+                        TcbStatus::try_from(view_tcb_level.tcb_status()).unwrap(),
+                        tcb_level.tcb_status
+                    );
                     assert_eq!(view_tcb_level.tcb_isvsvn(), tcb_level.tcb.isvsvn);
 
                     let advisory_ids = tcb_level.advisory_ids.as_ref();
@@ -467,7 +486,10 @@ fn test_tcb_v3_tdx_bytemuck() {
             view_tcb_level.tcb_date_timestamp(),
             tcb_level.tcb_date.timestamp() as u64
         );
-        assert_eq!(view_tcb_level.tcb_status().unwrap(), tcb_level.tcb_status);
+        assert_eq!(
+            TcbStatus::try_from(view_tcb_level.tcb_status()).unwrap(),
+            tcb_level.tcb_status
+        );
         assert_eq!(view_tcb_level.pce_svn(), tcb_level.tcb.pcesvn());
 
         let advisory_ids = tcb_level.advisory_ids.as_ref();

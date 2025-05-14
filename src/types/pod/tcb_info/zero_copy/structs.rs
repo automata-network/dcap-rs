@@ -6,7 +6,6 @@ use crate::types::pod::tcb_info::{
     TcbInfoHeader, TdxModulePodData, TdxModuleIdentityHeader, TdxTcbLevelHeader, 
     TcbLevelHeader, TcbComponentHeader
 };
-use crate::types::tcb_info::TcbStatus;
 use bytemuck::Pod;
 use core::str;
 
@@ -171,8 +170,8 @@ impl<'a> TdxTcbLevelZeroCopy<'a> {
         })
     }
     pub fn tcb_isvsvn(&self) -> u8 { self.header.tcb_isvsvn }
-    pub fn tcb_status(&self) -> Result<TcbStatus, ZeroCopyError> { 
-        TcbStatus::try_from(self.header.tcb_status).map_err(|_| ZeroCopyError::InvalidEnumValue)
+    pub fn tcb_status(&self) -> u8 { 
+        self.header.tcb_status
     }
     pub fn tcb_date_timestamp(&self) -> u64 { self.header.tcb_date_timestamp }
     pub fn advisory_ids_count(&self) -> u32 { self.header.advisory_ids_count }
@@ -275,8 +274,8 @@ impl<'a> TcbLevelZeroCopy<'a> {
             advisory_ids_data_payload: adv_data_payload,
         })
     }
-    pub fn tcb_status(&self) -> Result<TcbStatus, ZeroCopyError> {
-        TcbStatus::try_from(self.header.tcb_status).map_err(|_| ZeroCopyError::InvalidEnumValue)
+    pub fn tcb_status(&self) -> u8 {
+        self.header.tcb_status
     }
     pub fn pce_svn(&self) -> u16 { self.header.pce_svn }
     pub fn tcb_date_timestamp(&self) -> u64 { self.header.tcb_date_timestamp }
