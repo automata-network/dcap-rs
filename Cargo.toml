@@ -36,5 +36,7 @@ default-features = false
 features = [ "std", "p256", "x509" ]
 
 [features]
-default = []
+default = ["full"]
+# Solana BPF must use the "zero-copy" feature
 zero-copy = []
+full = []

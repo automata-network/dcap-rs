@@ -2,7 +2,7 @@ use bytemuck::{Pod, Zeroable};
 pub mod utils;
 pub mod zero_copy;
 
-#[cfg(not(feature = "zero-copy"))]
+#[cfg(feature = "full")]
 pub mod serialize;
 #[cfg(all(test, not(feature = "zero-copy")))]
 mod tests;

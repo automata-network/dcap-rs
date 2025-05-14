@@ -1,13 +1,13 @@
 use quote::QuoteBody;
 
-#[cfg(not(feature = "zero-copy"))]
+#[cfg(feature = "full")]
 pub mod collateral;
+#[cfg(feature = "full")]
+pub mod tcb_info;
 pub mod enclave_identity;
 pub mod quote;
 pub mod report;
 pub mod sgx_x509;
-#[cfg(not(feature = "zero-copy"))]
-pub mod tcb_info;
 pub mod pod;
 
 pub type UInt16LE = zerocopy::little_endian::U16;

@@ -4,7 +4,7 @@ pub mod error;
 pub mod structs;
 pub mod iterators;
 
-#[cfg(not(feature = "zero-copy"))]
+#[cfg(feature = "full")]
 pub mod conversion;
 
 pub use error::ZeroCopyError;

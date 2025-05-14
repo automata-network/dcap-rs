@@ -5,7 +5,7 @@ use chrono::Utc;
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
-#[cfg(not(feature = "zero-copy"))]
+#[cfg(feature = "full")]
 use super::tcb_info::TcbStatus;
 
 const ENCLAVE_IDENTITY_V2: u16 = 2;
@@ -180,7 +180,7 @@ impl std::fmt::Display for QeTcbStatus {
     }
 }
 
-#[cfg(not(feature = "zero-copy"))]
+#[cfg(feature = "full")]
 #[allow(clippy::from_over_into)]
 impl Into<TcbStatus> for QeTcbStatus {
     fn into(self) -> TcbStatus {
