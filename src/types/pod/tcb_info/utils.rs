@@ -4,8 +4,7 @@ use super::zero_copy::{
 };
 use crate::types::{
     quote::{Quote, QuoteBody},
-    sgx_x509::SgxPckExtension,
-    tcb_info::TcbStatus,
+    sgx_x509::SgxPckExtension
 };
 
 pub fn lookup<'a>(
@@ -35,7 +34,7 @@ pub fn lookup<'a>(
         return Err(ZeroCopyError::NoMatchingSgxTcbLevel);
     }
 
-    let mut tdx_tcb_status_u8 = TcbStatus::Unspecified as u8;
+    let mut tdx_tcb_status_u8 = 7u8; // TcbStatus::Unspecified = 7
 
     if let QuoteBody::Td10QuoteBody(tdx_quote_body) = &quote.body {
         // Start iterating from the found sgx matching level's index
