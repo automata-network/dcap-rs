@@ -280,6 +280,7 @@ impl TryFrom<u8> for TcbStatus {
             4 => Ok(TcbStatus::ConfigurationAndSWHardeningNeeded),
             5 => Ok(TcbStatus::OutOfDateConfigurationNeeded),
             6 => Ok(TcbStatus::Revoked),
+            7 => Ok(TcbStatus::Unspecified),
             _ => Err("Unsupported TCB status"),
         }
     }
@@ -488,7 +489,7 @@ impl TcbStatus {
                     let components_match = tdx_tcb_components
                         .iter()
                         .zip(body.tee_tcb_svn.iter())
-                        .all(|(&comp, &svn)| comp >= svn);
+                        .all(|(&comp, &svn)| comp <= svn);
 
                     if components_match {
                         tdx_tcb_status = level.tcb_status;
