@@ -1,854 +1,326 @@
-use super::*;
-use crate::types::tcb_info::*;
+use super::zero_copy::TcbInfoZeroCopy;
+use super::zero_copy::conversion::tcb_info_from_zero_copy;
+use super::{
+    TcbInfoHeader, TcbLevelHeader, TdxModuleIdentityHeader, TdxModulePodData, TdxTcbLevelHeader,
+};
+use crate::types::tcb_info::{Tcb, TcbInfo};
 
-impl TryFrom<TcbInfoAndSignature> for TcbPod {
-    type Error = &'static str;
+use bytemuck::Zeroable;
+use core::mem; // For align_of
 
-    fn try_from(
-        tcb_info_json_parsed: TcbInfoAndSignature,
-    ) -> std::result::Result<Self, Self::Error> {
-        let tcb_info = TcbInfoPod::try_from(tcb_info_json_parsed.get_tcb_info().unwrap())?;
-        let mut signature: [u8; 64] = [0; 64];
-        signature.copy_from_slice(&tcb_info_json_parsed.signature);
-
-        Ok(TcbPod {
-            tcb_info,
-            signature, // Placeholder for signature
-        })
+// Helper function to append padding (null bytes) to `bytes_vec` so its new total length
+// becomes a multiple of `align_to`.
+// Returns the number of padding bytes that were added.
+fn append_padding_to_align(bytes_vec: &mut Vec<u8>, align_to: usize) -> usize {
+    let current_len = bytes_vec.len();
+    let remainder = current_len % align_to;
+    let mut padding_bytes_added = 0;
+    if remainder != 0 {
+        padding_bytes_added = align_to - remainder;
+        for _ in 0..padding_bytes_added {
+            bytes_vec.push(0); // Add null bytes for padding
+        }
     }
+    padding_bytes_added
 }
 
-impl TryFrom<TcbInfo> for TcbInfoPod {
-    type Error = &'static str;
-
-    fn try_from(tcb_info: TcbInfo) -> std::result::Result<Self, Self::Error> {
-        // Convert pceid
-        let mut pceid = [0u8; 4];
-        let pceid_bytes = tcb_info.pce_id.as_bytes();
-        if pceid_bytes.len() > 4 {
-            return Err("PCE ID too long for fixed-size array");
-        }
-        pceid[..pceid_bytes.len()].copy_from_slice(pceid_bytes);
-
-        // Convert id
-        let mut id = [0u8; 6];
-        let tcb_id = tcb_info.id;
-        let id_bytes = match tcb_id {
-            Some(ref id) => id.as_bytes(),
-            None => b"",
-        };
-        id[..id_bytes.len()].copy_from_slice(id_bytes);
-
-        // Convert fmspc
-        let mut fmspc = [0u8; 12];
-        let fmspc_bytes = tcb_info.fmspc.as_bytes();
-        if fmspc_bytes.len() > 12 {
-            return Err("FMSPC too long for fixed-size array");
-        }
-        fmspc[..fmspc_bytes.len()].copy_from_slice(fmspc_bytes);
-
-        // Convert version
-        let version = u32::from(tcb_info.version);
-
-        // Convert timestamps
-        let issued_timestamp = tcb_info.issue_date.timestamp() as u64;
-        let next_update_timestamp = tcb_info.next_update.timestamp() as u64;
-
-        // Convert tdx_module
-        let tdx_module = match tcb_info.tdx_module {
-            Some(tdx_module) => TdxModulePod::try_from(tdx_module)?,
-            None => TdxModulePod {
-                mrsigner_hex: [0u8; 96],
-                attributes_hex: [0u8; 16],
-                attributes_mask_hex: [0u8; 16],
-            },
-        };
-
-        // Convert tdx_module_identities
-        let mut tdx_module_identities = [TdxModuleIdentityPod {
-            id: [0u8; 12],
-            mrsigner_hex: [0u8; 96],
-            _pad: [0u8; 4],
-            attributes_hex: [0u8; 16],
-            attributes_mask_hex: [0u8; 16],
-            tcb_levels: [TdxTcbLevelPod {
-                tcb_isvsvn: 0,
-                tcb_status: 0,
-                _pad: [0u8; 6],
-                tcb_date: 0,
-                advisory_ids: [[0u8; 32]; MAX_ADVISORY_IDS_SIZE],
-            }; TDX_MODULE_TCB_MAX_LEVEL_SIZE],
-        }; TDX_MODULE_TCB_MAX_LEVEL_SIZE];
-
-        if let Some(identities) = tcb_info.tdx_module_identities {
-            let len = identities.len();
-            if len > TDX_MODULE_TCB_MAX_LEVEL_SIZE {
-                return Err("TDX Module Identities exceeded TDX_MODULE_TCB_MAX_LEVEL_SIZE");
-            }
-            let len = identities.len().min(TDX_MODULE_TCB_MAX_LEVEL_SIZE);
-            for (i, identity) in identities.into_iter().take(len).enumerate() {
-                tdx_module_identities[i] = TdxModuleIdentityPod::try_from(identity)?;
-            }
-        }
-
-        // Convert tcb_levels
-        let mut tcb_levels = [TcbLevelPod {
-            tcb_status: 0,
-            _pad0: 0,
-            pce_svn: 0,
-            _pad1: [0u8; 4],
-            tcb_date: 0,
-            sgx_tcb_components: [TcbComponent {
-                cpusvn: 0,
-                category: [0u8; 16],
-                component_type: [0u8; 64],
-            }; 16],
-            tdx_tcb_components: [TcbComponent {
-                cpusvn: 0,
-                category: [0u8; 16],
-                component_type: [0u8; 64],
-            }; 16],
-            advisory_ids: [[0u8; 32]; MAX_ADVISORY_IDS_SIZE],
-        }; TCB_MAX_LEVEL_SIZE];
-
-        let len = tcb_info.tcb_levels.len();
-        if len > TCB_MAX_LEVEL_SIZE {
-            return Err("TCB Levels exceeded TCB_MAX_LEVEL_SIZE");
-        }
-
-        let len = tcb_info.tcb_levels.len().min(TCB_MAX_LEVEL_SIZE);
-        for (i, level) in tcb_info.tcb_levels.into_iter().take(len).enumerate() {
-            tcb_levels[i] = TcbLevelPod::try_from(level)?;
-        }
-
-        Ok(TcbInfoPod {
-            pceid_hex: pceid,
-            id,
-            fmspc_hex: fmspc,
-            tcb_type: tcb_info.tcb_type, // Treating as non-private
-            _pad0: 0,
-            version,
-            _pad1: [0u8; 4],
-            issued_timestamp,
-            next_update_timestamp,
-            tcb_evaluation_data_number: tcb_info.tcb_evaluation_data_number, // Treating as non-private
-            _pad2: [0u8; 4],
-            tdx_module,
-            tdx_module_identities,
-            tcb_levels,
-        })
-    }
+// Helper function to copy string to fixed-size byte array, null-padding if shorter, truncating if longer.
+fn string_to_fixed_bytes<const N: usize>(s: &str) -> [u8; N] {
+    let mut arr = [0u8; N];
+    let bytes = s.as_bytes();
+    let len = bytes.len().min(N);
+    arr[..len].copy_from_slice(&bytes[..len]);
+    arr
 }
 
-impl TryFrom<TcbInfoPod> for TcbInfo {
-    type Error = &'static str;
+// Helper function to copy a hex string's ASCII characters to a fixed-size byte array.
+// It null-pads if the string is shorter and truncates if longer.
+fn hex_chars_to_fixed_bytes<const N: usize>(hex_s: &str) -> [u8; N] {
+    let mut arr = [0u8; N];
+    let s_bytes = hex_s.as_bytes();
+    let len_to_copy = s_bytes.len().min(N);
+    arr[..len_to_copy].copy_from_slice(&s_bytes[..len_to_copy]);
+    arr
+}
 
-    fn try_from(tcb_info_pod: TcbInfoPod) -> std::result::Result<Self, Self::Error> {
-        // Convert pceid
-        let null_pos = tcb_info_pod
-            .pceid_hex
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(tcb_info_pod.pceid_hex.len());
-        let pce_id = String::from_utf8(tcb_info_pod.pceid_hex[..null_pos].to_vec())
-            .map_err(|_| "Invalid UTF-8 in PCE ID")?;
+/// Represents the combined TCB Info Header and its serialized payload.
+pub struct SerializedTcbInfo {
+    pub header: TcbInfoHeader,
+    pub payload: Vec<u8>,
+}
 
-        // Convert id
-        let null_pos = tcb_info_pod
-            .id
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(tcb_info_pod.id.len());
-        let id = if null_pos > 0 {
-            Some(
-                String::from_utf8(tcb_info_pod.id[..null_pos].to_vec())
-                    .map_err(|_| "Invalid UTF-8 in ID")?,
-            )
-        } else {
-            None
-        };
+impl SerializedTcbInfo {
+    /// Creates a SerializedTcbInfo from an application-level TcbInfo struct.
+    pub fn from_rust_tcb_info(rust_tcb_info: &TcbInfo) -> Result<Self, String> {
+        let mut header = TcbInfoHeader::zeroed();
+        let mut payload_bytes = Vec::new();
+        let mut current_payload_offset = 0;
 
-        // Convert fmspc
-        let null_pos = tcb_info_pod
-            .fmspc_hex
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(tcb_info_pod.fmspc_hex.len());
-        let fmspc = String::from_utf8(tcb_info_pod.fmspc_hex[..null_pos].to_vec())
-            .map_err(|_| "Invalid UTF-8 in FMSPC")?;
+        header.id_type = string_to_fixed_bytes::<6>(rust_tcb_info.id.as_deref().unwrap_or(""));
+        header.version = rust_tcb_info.version as u32; // TcbInfoVersion derives Copy
+        header.issue_date_timestamp = rust_tcb_info.issue_date.timestamp() as u64;
+        header.next_update_timestamp = rust_tcb_info.next_update.timestamp() as u64;
+        header.fmspc_hex = hex_chars_to_fixed_bytes::<12>(&rust_tcb_info.fmspc);
+        header.pce_id_hex = hex_chars_to_fixed_bytes::<4>(&rust_tcb_info.pce_id);
+        header.tcb_type = rust_tcb_info.tcb_type;
+        header.tcb_evaluation_data_number = rust_tcb_info.tcb_evaluation_data_number;
 
-        // Convert version
-        let version = TcbInfoVersion::try_from(tcb_info_pod.version)?;
-
-        // Convert timestamps
-        let issue_date = chrono::DateTime::<chrono::Utc>::from_timestamp(
-            tcb_info_pod.issued_timestamp as i64,
-            0,
-        )
-        .ok_or("Invalid issue date timestamp")?;
-        let next_update = chrono::DateTime::<chrono::Utc>::from_timestamp(
-            tcb_info_pod.next_update_timestamp as i64,
-            0,
-        )
-        .ok_or("Invalid next update timestamp")?;
-
-        // Convert tdx_module
-        let tdx_module = if !tdx_module_is_empty(&tcb_info_pod.tdx_module) {
-            Some(TdxModule::try_from(tcb_info_pod.tdx_module)?)
-        } else {
-            None
-        };
-
-        // Convert tdx_module_identities
-        let tdx_module_identities =
-            if tdx_module_identities_has_data(&tcb_info_pod.tdx_module_identities) {
-                let mut identities = Vec::with_capacity(TDX_MODULE_TCB_MAX_LEVEL_SIZE);
-                for identity_pod in tcb_info_pod.tdx_module_identities.iter() {
-                    if !tdx_module_identity_is_empty(identity_pod) {
-                        identities.push(TdxModuleIdentity::try_from(*identity_pod)?);
-                    }
-                }
-                if identities.is_empty() {
-                    None
-                } else {
-                    Some(identities)
-                }
-            } else {
-                None
+        if let Some(tdx_module) = &rust_tcb_info.tdx_module {
+            header.tdx_module_present = 1;
+            let pod_data = TdxModulePodData {
+                mrsigner_hex: hex_chars_to_fixed_bytes::<96>(&tdx_module.mrsigner),
+                attributes_hex: hex_chars_to_fixed_bytes::<16>(&tdx_module.attributes),
+                attributes_mask_hex: hex_chars_to_fixed_bytes::<16>(&tdx_module.attributes_mask),
             };
-
-        // Convert tcb_levels
-        let mut tcb_levels = Vec::with_capacity(TCB_MAX_LEVEL_SIZE);
-        for level_pod in tcb_info_pod.tcb_levels.iter() {
-            if level_pod.tcb_date > 0 {
-                tcb_levels.push(TcbLevel::try_from(*level_pod)?);
-            }
+            let tdx_module_bytes = bytemuck::bytes_of(&pod_data);
+            payload_bytes.extend_from_slice(tdx_module_bytes);
+            header.tdx_module_data_len = tdx_module_bytes.len() as u32;
+            current_payload_offset += tdx_module_bytes.len();
+        } else {
+            header.tdx_module_present = 0;
+            header.tdx_module_data_len = 0;
         }
 
-        Ok(TcbInfo {
-            id,
-            version,
-            issue_date,
-            next_update,
-            fmspc,
-            pce_id,
-            tcb_type: tcb_info_pod.tcb_type,
-            tcb_evaluation_data_number: tcb_info_pod.tcb_evaluation_data_number,
-            tdx_module,
-            tdx_module_identities,
-            tcb_levels,
-        })
-    }
-}
+        let tdx_module_identities_payload_start = current_payload_offset;
+        if let Some(identities) = &rust_tcb_info.tdx_module_identities {
+            header.tdx_module_identities_count = identities.len() as u32;
+            for identity in identities {
+                let mut identity_header = TdxModuleIdentityHeader::zeroed();
+                identity_header.mrsigner_hex = hex_chars_to_fixed_bytes::<96>(&identity.mrsigner);
+                identity_header.attributes_hex =
+                    hex_chars_to_fixed_bytes::<16>(&identity.attributes);
+                identity_header.attributes_mask_hex =
+                    hex_chars_to_fixed_bytes::<16>(&identity.attributes_mask);
 
-// Helper function to check if a TdxModulePod is empty (all zeros)
-fn tdx_module_is_empty(module: &TdxModulePod) -> bool {
-    module.mrsigner_hex.iter().all(|&b| b == 0)
-        && module.attributes_hex.iter().all(|&b| b == 0)
-        && module.attributes_mask_hex.iter().all(|&b| b == 0)
-}
+                let id_bytes = identity.id.as_bytes();
+                identity_header.id_len = id_bytes.len() as u8;
 
-// Helper function to check if any TdxModuleIdentityPod has data
-fn tdx_module_identities_has_data(identities: &[TdxModuleIdentityPod; TDX_MODULE_TCB_MAX_LEVEL_SIZE]) -> bool {
-    identities
-        .iter()
-        .any(|identity| !tdx_module_identity_is_empty(identity))
-}
+                let mut tdx_tcb_levels_payload_for_identity = Vec::new();
+                identity_header.tcb_levels_count = identity.tcb_levels.len() as u32;
+                for tdx_tcb_level in &identity.tcb_levels {
+                    let mut tdx_tcb_level_header = TdxTcbLevelHeader::zeroed();
+                    tdx_tcb_level_header.tcb_isvsvn = tdx_tcb_level.tcb.isvsvn;
+                    tdx_tcb_level_header.tcb_status = tdx_tcb_level.tcb_status as u8;
+                    tdx_tcb_level_header.tcb_date_timestamp =
+                        tdx_tcb_level.tcb_date.timestamp() as u64;
 
-// Helper function to check if a TdxModuleIdentityPod is empty
-fn tdx_module_identity_is_empty(identity: &TdxModuleIdentityPod) -> bool {
-    identity.id.iter().all(|&b| b == 0)
-        && identity.mrsigner_hex.iter().all(|&b| b == 0)
-        && identity.attributes_hex.iter().all(|&b| b == 0)
-        && identity.attributes_mask_hex.iter().all(|&b| b == 0)
-}
-
-impl TryFrom<TdxModule> for TdxModulePod {
-    type Error = &'static str;
-
-    fn try_from(tdx_module: TdxModule) -> std::result::Result<Self, Self::Error> {
-        // Convert mrsigner
-        let mut mrsigner = [0u8; 96];
-        let mrsigner_bytes = tdx_module.mrsigner.as_bytes();
-        if mrsigner_bytes.len() > 96 {
-            return Err("mrsigner too long for fixed-size array");
-        }
-        mrsigner[..mrsigner_bytes.len()].copy_from_slice(mrsigner_bytes);
-
-        // Convert attributes
-        let mut attributes = [0u8; 16];
-        let attributes_bytes = tdx_module.attributes.as_bytes();
-        if attributes_bytes.len() > 16 {
-            return Err("attributes too long for fixed-size array");
-        }
-        attributes[..attributes_bytes.len()].copy_from_slice(attributes_bytes);
-
-        // Convert attributes_mask
-        let mut attributes_mask = [0u8; 16];
-        let attributes_mask_bytes = tdx_module.attributes_mask.as_bytes();
-        if attributes_mask_bytes.len() > 16 {
-            return Err("attributes_mask too long for fixed-size array");
-        }
-        attributes_mask[..attributes_mask_bytes.len()].copy_from_slice(attributes_mask_bytes);
-
-        Ok(TdxModulePod {
-            mrsigner_hex: mrsigner,
-            attributes_hex: attributes,
-            attributes_mask_hex: attributes_mask,
-        })
-    }
-}
-
-impl TryFrom<TdxModulePod> for TdxModule {
-    type Error = &'static str;
-
-    fn try_from(tdx_module_pod: TdxModulePod) -> std::result::Result<Self, Self::Error> {
-        // Convert mrsigner
-        let null_pos = tdx_module_pod
-            .mrsigner_hex
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(tdx_module_pod.mrsigner_hex.len());
-        let mrsigner = String::from_utf8(tdx_module_pod.mrsigner_hex[..null_pos].to_vec())
-            .map_err(|_| "Invalid UTF-8 in mrsigner")?;
-
-        // Convert attributes
-        let null_pos = tdx_module_pod
-            .attributes_hex
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(tdx_module_pod.attributes_hex.len());
-        let attributes = String::from_utf8(tdx_module_pod.attributes_hex[..null_pos].to_vec())
-            .map_err(|_| "Invalid UTF-8 in attributes")?;
-
-        // Convert attributes_mask
-        let null_pos = tdx_module_pod
-            .attributes_mask_hex
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(tdx_module_pod.attributes_mask_hex.len());
-        let attributes_mask =
-            String::from_utf8(tdx_module_pod.attributes_mask_hex[..null_pos].to_vec())
-                .map_err(|_| "Invalid UTF-8 in attributes_mask")?;
-
-        Ok(TdxModule {
-            mrsigner,
-            attributes,
-            attributes_mask,
-        })
-    }
-}
-
-impl TryFrom<TdxModuleIdentity> for TdxModuleIdentityPod {
-    type Error = &'static str;
-
-    fn try_from(tdx_module_identity: TdxModuleIdentity) -> std::result::Result<Self, Self::Error> {
-        // Convert id
-        let mut id = [0u8; 12];
-        let id_bytes = tdx_module_identity.id.as_bytes();
-        if id_bytes.len() > 12 {
-            return Err("id too long for fixed-size array");
-        }
-        id[..id_bytes.len()].copy_from_slice(id_bytes);
-
-        // Convert mrsigner
-        let mut mrsigner = [0u8; 96];
-        let mrsigner_bytes = tdx_module_identity.mrsigner.as_bytes();
-        if mrsigner_bytes.len() > 96 {
-            return Err("mrsigner too long for fixed-size array");
-        }
-        mrsigner[..mrsigner_bytes.len()].copy_from_slice(mrsigner_bytes);
-
-        // Convert attributes
-        let mut attributes = [0u8; 16];
-        let attributes_bytes = tdx_module_identity.attributes.as_bytes();
-        if attributes_bytes.len() > 16 {
-            return Err("attributes too long for fixed-size array");
-        }
-        attributes[..attributes_bytes.len()].copy_from_slice(attributes_bytes);
-
-        // Convert attributes_mask
-        let mut attributes_mask = [0u8; 16];
-        let attributes_mask_bytes = tdx_module_identity.attributes_mask.as_bytes();
-        if attributes_mask_bytes.len() > 16 {
-            return Err("attributes_mask too long for fixed-size array");
-        }
-        attributes_mask[..attributes_mask_bytes.len()].copy_from_slice(attributes_mask_bytes);
-
-        // Convert tcb_levels
-        let mut tcb_levels = [TdxTcbLevelPod {
-            tcb_isvsvn: 0,
-            tcb_status: 0,
-            _pad: [0u8; 6],
-            tcb_date: 0,
-            advisory_ids: [[0u8; 32]; MAX_ADVISORY_IDS_SIZE],
-        }; TDX_MODULE_TCB_MAX_LEVEL_SIZE];
-
-        let len = tdx_module_identity.tcb_levels.len();
-        if len > TDX_MODULE_TCB_MAX_LEVEL_SIZE {
-            return Err("TCB Levels exceeded TDX_MODULE_TCB_MAX_LEVEL_SIZE");
-        }
-
-        let len = tdx_module_identity.tcb_levels.len().min(TDX_MODULE_TCB_MAX_LEVEL_SIZE);
-        for (i, level) in tdx_module_identity
-            .tcb_levels
-            .into_iter()
-            .take(len)
-            .enumerate()
-        {
-            tcb_levels[i] = TdxTcbLevelPod::try_from(level)?;
-        }
-
-        Ok(TdxModuleIdentityPod {
-            id,
-            mrsigner_hex: mrsigner,
-            _pad: [0u8; 4],
-            attributes_hex: attributes,
-            attributes_mask_hex: attributes_mask,
-            tcb_levels,
-        })
-    }
-}
-
-impl TryFrom<TdxModuleIdentityPod> for TdxModuleIdentity {
-    type Error = &'static str;
-
-    fn try_from(
-        tdx_module_identity_pod: TdxModuleIdentityPod,
-    ) -> std::result::Result<Self, Self::Error> {
-        // Convert id
-        let null_pos = tdx_module_identity_pod
-            .id
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(tdx_module_identity_pod.id.len());
-        let id = String::from_utf8(tdx_module_identity_pod.id[..null_pos].to_vec())
-            .map_err(|_| "Invalid UTF-8 in id")?;
-
-        // Convert mrsigner
-        let null_pos = tdx_module_identity_pod
-            .mrsigner_hex
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(tdx_module_identity_pod.mrsigner_hex.len());
-        let mrsigner = String::from_utf8(tdx_module_identity_pod.mrsigner_hex[..null_pos].to_vec())
-            .map_err(|_| "Invalid UTF-8 in mrsigner")?;
-
-        // Convert attributes
-        let null_pos = tdx_module_identity_pod
-            .attributes_hex
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(tdx_module_identity_pod.attributes_hex.len());
-        let attributes = String::from_utf8(tdx_module_identity_pod.attributes_hex[..null_pos].to_vec())
-            .map_err(|_| "Invalid UTF-8 in attributes")?;
-
-        // Convert attributes_mask
-        let null_pos = tdx_module_identity_pod
-            .attributes_mask_hex
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(tdx_module_identity_pod.attributes_mask_hex.len());
-        let attributes_mask =
-            String::from_utf8(tdx_module_identity_pod.attributes_mask_hex[..null_pos].to_vec())
-                .map_err(|_| "Invalid UTF-8 in attributes_mask")?;
-
-        // Convert tcb_levels
-        let mut tcb_levels = Vec::with_capacity(TDX_MODULE_TCB_MAX_LEVEL_SIZE);
-        for level_pod in tdx_module_identity_pod.tcb_levels.iter() {
-            if level_pod.tcb_date > 0 {
-                tcb_levels.push(TdxTcbLevel::try_from(*level_pod)?);
-            }
-        }
-
-        Ok(TdxModuleIdentity {
-            id,
-            mrsigner,
-            attributes,
-            attributes_mask,
-            tcb_levels,
-        })
-    }
-}
-
-impl TryFrom<TdxTcbLevel> for TdxTcbLevelPod {
-    type Error = &'static str;
-
-    fn try_from(tdx_tcb_level: TdxTcbLevel) -> std::result::Result<Self, Self::Error> {
-        // Convert tcb_isvsvn
-        let tcb_isvsvn = tdx_tcb_level.tcb.isvsvn;
-
-        // Convert tcb_status
-        let tcb_status = tdx_tcb_level.tcb_status as u8;
-
-        // Convert tcb_date
-        let tcb_date = tdx_tcb_level.tcb_date.timestamp() as u64;
-
-        // Convert advisory_ids
-        let mut advisory_ids = [[0u8; 32]; MAX_ADVISORY_IDS_SIZE];
-        if let Some(ids) = tdx_tcb_level.advisory_ids {
-            let len = ids.len();
-            if len > MAX_ADVISORY_IDS_SIZE {
-                return Err("Advisory IDs exceeded MAX_ADVISORY_IDS_SIZE");
-            }
-            let len = ids.len().min(MAX_ADVISORY_IDS_SIZE);
-            for (i, id) in ids.into_iter().take(len).enumerate() {
-                let id_bytes = id.as_bytes();
-                if id_bytes.len() > 32 {
-                    return Err("Advisory ID too long for fixed-size array");
-                }
-                advisory_ids[i][..id_bytes.len()].copy_from_slice(id_bytes);
-            }
-        }
-
-        Ok(TdxTcbLevelPod {
-            tcb_isvsvn,
-            tcb_status,
-            _pad: [0u8; 6],
-            tcb_date,
-            advisory_ids,
-        })
-    }
-}
-
-impl TryFrom<TdxTcbLevelPod> for TdxTcbLevel {
-    type Error = &'static str;
-
-    fn try_from(tdx_tcb_level_pod: TdxTcbLevelPod) -> std::result::Result<Self, Self::Error> {
-        // Convert tcb
-        let tcb = TcbTdx {
-            isvsvn: tdx_tcb_level_pod.tcb_isvsvn,
-        };
-
-        // Convert tcb_status
-        let tcb_status = TcbStatus::try_from(tdx_tcb_level_pod.tcb_status)?;
-
-        // Convert tcb_date
-        let tcb_date =
-            chrono::DateTime::<chrono::Utc>::from_timestamp(tdx_tcb_level_pod.tcb_date as i64, 0)
-                .ok_or("Invalid tcb_date timestamp")?;
-
-        // Convert advisory_ids
-        let mut advisory_ids = Vec::new();
-        for id_array in tdx_tcb_level_pod.advisory_ids.iter() {
-            if id_array.iter().any(|&b| b != 0) {
-                let null_pos = id_array
-                    .iter()
-                    .position(|&b| b == 0)
-                    .unwrap_or(id_array.len());
-                let id = String::from_utf8(id_array[..null_pos].to_vec())
-                    .map_err(|_| "Invalid UTF-8 in advisory ID")?;
-                advisory_ids.push(id);
-            }
-        }
-
-        Ok(TdxTcbLevel {
-            tcb,
-            tcb_date,
-            tcb_status,
-            advisory_ids: if advisory_ids.is_empty() {
-                None
-            } else {
-                Some(advisory_ids)
-            },
-        })
-    }
-}
-
-impl TryFrom<TcbLevel> for TcbLevelPod {
-    type Error = &'static str;
-
-    fn try_from(tcb_level: TcbLevel) -> std::result::Result<Self, Self::Error> {
-        // Convert tcb_status
-        let tcb_status = tcb_level.tcb_status as u8;
-
-        // Convert pce_svn
-        let pce_svn = tcb_level.tcb.pcesvn();
-
-        // Convert sgx_tcb_components
-        let sgx_components = tcb_level.tcb.sgx_tcb_components();
-        let mut sgx_tcb_components = [TcbComponent {
-            cpusvn: 0,
-            category: [0u8; 16],
-            component_type: [0u8; 64],
-        }; 16];
-
-        match &tcb_level.tcb {
-            Tcb::V2(_) => {
-                for (i, &svn) in sgx_components.iter().enumerate() {
-                    sgx_tcb_components[i] = TcbComponent {
-                        cpusvn: svn,
-                        category: [0u8; 16],
-                        component_type: [0u8; 64],
-                    };
-                }
-            },
-            Tcb::V3(v3) => {
-                for (i, component) in v3.sgxtcbcomponents.iter().enumerate() {
-                    let mut category = [0u8; 16];
-                    if let Some(cat) = &component.category {
-                        let cat_bytes = cat.as_bytes();
-                        if cat_bytes.len() > 16 {
-                            return Err("Category too long for fixed-size array");
+                    let mut advisory_id_lengths_bytes = Vec::new();
+                    let mut advisory_id_data_bytes = Vec::new();
+                    if let Some(advisory_ids) = &tdx_tcb_level.advisory_ids {
+                        tdx_tcb_level_header.advisory_ids_count = advisory_ids.len() as u32;
+                        for adv_id in advisory_ids {
+                            let adv_id_bytes = adv_id.as_bytes();
+                            advisory_id_lengths_bytes
+                                .extend_from_slice(&(adv_id_bytes.len() as u16).to_le_bytes());
+                            advisory_id_data_bytes.extend_from_slice(adv_id_bytes);
                         }
-                        category[..cat_bytes.len()].copy_from_slice(cat_bytes);
-                    }
-
-                    let mut component_type = [0u8; 64];
-                    if let Some(typ) = &component.component_type {
-                        let typ_bytes = typ.as_bytes();
-                        if typ_bytes.len() > 64 {
-                            return Err("Component type too long for fixed-size array");
-                        }
-                        component_type[..typ_bytes.len()].copy_from_slice(typ_bytes);
-                    }
-
-                    sgx_tcb_components[i] = TcbComponent {
-                        cpusvn: component.svn,
-                        category,
-                        component_type,
-                    };
-                }
-            },
-        }
-
-        // Convert tdx_tcb_components
-        let mut tdx_tcb_components = [TcbComponent {
-            cpusvn: 0,
-            category: [0u8; 16],
-            component_type: [0u8; 64],
-        }; 16];
-
-        if let Some(tdx_components) = tcb_level.tcb.tdx_tcb_components() {
-            if let Tcb::V3(v3) = &tcb_level.tcb {
-                if let Some(tdx_comps) = &v3.tdxtcbcomponents {
-                    for (i, (component, &svn)) in
-                        tdx_comps.iter().zip(tdx_components.iter()).enumerate()
-                    {
-                        let mut category = [0u8; 16];
-                        if let Some(cat) = &component.category {
-                            let cat_bytes = cat.as_bytes();
-                            if cat_bytes.len() > 16 {
-                                return Err("Category too long for fixed-size array");
-                            }
-                            category[..cat_bytes.len()].copy_from_slice(cat_bytes);
-                        }
-
-                        let mut component_type = [0u8; 64];
-                        if let Some(typ) = &component.component_type {
-                            let typ_bytes = typ.as_bytes();
-                            if typ_bytes.len() > 64 {
-                                return Err("Component type too long for fixed-size array");
-                            }
-                            component_type[..typ_bytes.len()].copy_from_slice(typ_bytes);
-                        }
-
-                        tdx_tcb_components[i] = TcbComponent {
-                            cpusvn: svn,
-                            category,
-                            component_type,
-                        };
-                    }
-                }
-            }
-        }
-
-        // Convert advisory_ids
-        let mut advisory_ids = [[0u8; 32]; MAX_ADVISORY_IDS_SIZE];
-
-        if let Some(ids) = &tcb_level.advisory_ids {
-            let len = ids.len();
-            if len > MAX_ADVISORY_IDS_SIZE {
-                return Err("Advisory IDs exceeded MAX_ADVISORY_IDS_SIZE");
-            }
-            let len = ids.len().min(MAX_ADVISORY_IDS_SIZE);
-            for (i, id) in ids.iter().take(len).enumerate() {
-                let id_bytes = id.as_bytes();
-                if id_bytes.len() > 32 {
-                    return Err("Advisory ID too long for fixed-size array");
-                }
-                advisory_ids[i][..id_bytes.len()].copy_from_slice(id_bytes);
-            }
-        }
-
-        let tcb_date = tcb_level.tcb_date.timestamp() as u64;
-
-        Ok(TcbLevelPod {
-            tcb_status,
-            _pad0: 0,
-            pce_svn,
-            _pad1: [0u8; 4],
-            tcb_date,
-            sgx_tcb_components,
-            tdx_tcb_components,
-            advisory_ids,
-        })
-    }
-}
-
-impl TryFrom<TcbLevelPod> for TcbLevel {
-    type Error = &'static str;
-
-    fn try_from(tcb_level_pod: TcbLevelPod) -> std::result::Result<Self, Self::Error> {
-        // Convert tcb_status
-        let tcb_status = TcbStatus::try_from(tcb_level_pod.tcb_status)?;
-
-        // Determine if we're dealing with V2 or V3 based on component data
-        let has_v3_data = tcb_level_pod.sgx_tcb_components.iter().any(|comp| {
-            comp.category.iter().any(|&b| b != 0) || comp.component_type.iter().any(|&b| b != 0)
-        });
-
-        let mut advisory_ids = Vec::new();
-
-        // Convert tcb
-        let tcb = if has_v3_data {
-            // Create V3 TCB
-            let sgxtcbcomponents = core::array::from_fn(|_| TcbComponentV3 {
-                svn: 0,
-                category: None,
-                component_type: None,
-            });
-
-            let mut sgxtcbcomponents = sgxtcbcomponents;
-            for (i, comp) in tcb_level_pod.sgx_tcb_components.iter().enumerate() {
-                let category = if comp.category.iter().any(|&b| b != 0) {
-                    let null_pos = comp
-                        .category
-                        .iter()
-                        .position(|&b| b == 0)
-                        .unwrap_or(comp.category.len());
-                    let category_str = String::from_utf8(comp.category[..null_pos].to_vec())
-                        .map_err(|_| "Invalid UTF-8 in category")?;
-                    Some(category_str)
-                } else {
-                    None
-                };
-
-                let component_type = if comp.component_type.iter().any(|&b| b != 0) {
-                    let null_pos = comp
-                        .component_type
-                        .iter()
-                        .position(|&b| b == 0)
-                        .unwrap_or(comp.component_type.len());
-                    let type_str = String::from_utf8(comp.component_type[..null_pos].to_vec())
-                        .map_err(|_| "Invalid UTF-8 in component_type")?;
-                    Some(type_str)
-                } else {
-                    None
-                };
-
-                sgxtcbcomponents[i] = TcbComponentV3 {
-                    svn: comp.cpusvn,
-                    category,
-                    component_type,
-                };
-            }
-
-            let tdxtcbcomponents = if tcb_level_pod
-                .tdx_tcb_components
-                .iter()
-                .any(|comp| comp.cpusvn != 0)
-            {
-                let tdx_components = core::array::from_fn(|_| TcbComponentV3 {
-                    svn: 0,
-                    category: None,
-                    component_type: None,
-                });
-                let mut tdx_components = tdx_components;
-                for (i, comp) in tcb_level_pod.tdx_tcb_components.iter().enumerate() {
-                    let category = if comp.category.iter().any(|&b| b != 0) {
-                        let null_pos = comp
-                            .category
-                            .iter()
-                            .position(|&b| b == 0)
-                            .unwrap_or(comp.category.len());
-                        let category_str = String::from_utf8(comp.category[..null_pos].to_vec())
-                            .map_err(|_| "Invalid UTF-8 in category")?;
-                        Some(category_str)
                     } else {
-                        None
-                    };
+                        tdx_tcb_level_header.advisory_ids_count = 0;
+                    }
+                    tdx_tcb_level_header.advisory_ids_lengths_array_len =
+                        advisory_id_lengths_bytes.len() as u32;
+                    tdx_tcb_level_header.advisory_ids_data_total_len =
+                        advisory_id_data_bytes.len() as u32;
 
-                    let component_type = if comp.component_type.iter().any(|&b| b != 0) {
-                        let null_pos = comp
+                    tdx_tcb_levels_payload_for_identity
+                        .extend_from_slice(bytemuck::bytes_of(&tdx_tcb_level_header));
+                    tdx_tcb_levels_payload_for_identity
+                        .extend_from_slice(&advisory_id_lengths_bytes);
+                    tdx_tcb_levels_payload_for_identity.extend_from_slice(&advisory_id_data_bytes);
+
+                    // Add padding for the *next* TdxTcbLevelHeader in this sub-list
+                    append_padding_to_align(
+                        &mut tdx_tcb_levels_payload_for_identity,
+                        mem::align_of::<TdxTcbLevelHeader>() // Align to 8
+                    );
+                }
+                identity_header.tcb_levels_total_payload_len =
+                    tdx_tcb_levels_payload_for_identity.len() as u32;
+
+                payload_bytes.extend_from_slice(bytemuck::bytes_of(&identity_header));
+                current_payload_offset += mem::size_of::<TdxModuleIdentityHeader>();
+
+                payload_bytes.extend_from_slice(id_bytes);
+                current_payload_offset += id_bytes.len();
+
+                // Ensure the start of the TdxTcbLevel list (which follows id_bytes) is 8-byte aligned,
+                // as TdxTcbLevelHeader requires 8-byte alignment.
+                let padding_for_tdx_tcb_level_list = append_padding_to_align(
+                    &mut payload_bytes,
+                    mem::align_of::<TdxTcbLevelHeader>() // Align to 8
+                );
+                current_payload_offset += padding_for_tdx_tcb_level_list;
+
+                payload_bytes.extend_from_slice(&tdx_tcb_levels_payload_for_identity);
+                current_payload_offset += tdx_tcb_levels_payload_for_identity.len();
+                
+                // Add padding for the *next* TdxModuleIdentityHeader
+                let padding_added_for_next_identity = append_padding_to_align(
+                    &mut payload_bytes,
+                    mem::align_of::<TdxModuleIdentityHeader>() // Align to 4
+                );
+                current_payload_offset += padding_added_for_next_identity;
+            }
+        } else {
+            header.tdx_module_identities_count = 0;
+        }
+        header.tdx_module_identities_total_payload_len =
+            (current_payload_offset - tdx_module_identities_payload_start) as u32;
+
+        let tcb_levels_payload_start = current_payload_offset;
+        header.tcb_levels_count = rust_tcb_info.tcb_levels.len() as u32;
+        for rust_tcb_level in &rust_tcb_info.tcb_levels {
+            let mut tcb_level_header = TcbLevelHeader::zeroed();
+            tcb_level_header.tcb_status = rust_tcb_level.tcb_status as u8;
+            tcb_level_header.pce_svn = rust_tcb_level.tcb.pcesvn();
+            tcb_level_header.tcb_date_timestamp = rust_tcb_level.tcb_date.timestamp() as u64;
+
+            let mut sgx_components_payload_strings = Vec::new();
+            let mut tdx_components_payload_strings_for_level = Vec::new();
+
+            match &rust_tcb_level.tcb {
+                Tcb::V3(tcb_v3) => {
+                    for i in 0..16 {
+                        let comp_header_ref = &mut tcb_level_header.sgx_tcb_components[i];
+                        comp_header_ref.cpusvn = tcb_v3.sgxtcbcomponents[i].svn;
+                        let cat_str = tcb_v3.sgxtcbcomponents[i].category.as_deref().unwrap_or("");
+                        let type_str = tcb_v3.sgxtcbcomponents[i]
                             .component_type
-                            .iter()
-                            .position(|&b| b == 0)
-                            .unwrap_or(comp.component_type.len());
-                        let type_str = String::from_utf8(comp.component_type[..null_pos].to_vec())
-                            .map_err(|_| "Invalid UTF-8 in component_type")?;
-                        Some(type_str)
+                            .as_deref()
+                            .unwrap_or("");
+                        comp_header_ref.category_len = cat_str.as_bytes().len() as u8;
+                        comp_header_ref.component_type_len = type_str.as_bytes().len() as u8;
+                        sgx_components_payload_strings.extend_from_slice(cat_str.as_bytes());
+                        sgx_components_payload_strings.extend_from_slice(type_str.as_bytes());
+                    }
+                    if let Some(tdx_comps_v3) = &tcb_v3.tdxtcbcomponents {
+                        tcb_level_header.tdx_tcb_components_present = 1;
+                        for i in 0..16 {
+                            let comp_header_ref = &mut tcb_level_header.tdx_tcb_components[i];
+                            comp_header_ref.cpusvn = tdx_comps_v3[i].svn;
+                            let cat_str = tdx_comps_v3[i].category.as_deref().unwrap_or("");
+                            let type_str = tdx_comps_v3[i].component_type.as_deref().unwrap_or("");
+                            comp_header_ref.category_len = cat_str.as_bytes().len() as u8;
+                            comp_header_ref.component_type_len = type_str.as_bytes().len() as u8;
+                            tdx_components_payload_strings_for_level
+                                .extend_from_slice(cat_str.as_bytes());
+                            tdx_components_payload_strings_for_level
+                                .extend_from_slice(type_str.as_bytes());
+                        }
+                        tcb_level_header.tdx_components_strings_total_len =
+                            tdx_components_payload_strings_for_level.len() as u32;
                     } else {
-                        None
-                    };
-
-                    tdx_components[i] = TcbComponentV3 {
-                        svn: comp.cpusvn,
-                        category,
-                        component_type,
-                    };
-                }
-                Some(tdx_components)
-            } else {
-                None
-            };
-
-            // Convert advisory_ids
-            for id_array in tcb_level_pod.advisory_ids.iter() {
-                if id_array.iter().any(|&b| b != 0) {
-                    let null_pos = id_array
-                        .iter()
-                        .position(|&b| b == 0)
-                        .unwrap_or(id_array.len());
-                    let id = String::from_utf8(id_array[..null_pos].to_vec())
-                        .map_err(|_| "Invalid UTF-8 in advisory ID")?;
-                    advisory_ids.push(id);
-                }
+                        tcb_level_header.tdx_tcb_components_present = 0;
+                        tcb_level_header.tdx_components_strings_total_len = 0;
+                    }
+                },
+                Tcb::V2(_tcb_v2) => {
+                    let svns = rust_tcb_level.tcb.sgx_tcb_components();
+                    for i in 0..16 {
+                        let comp_header_ref = &mut tcb_level_header.sgx_tcb_components[i];
+                        comp_header_ref.cpusvn = svns[i];
+                        comp_header_ref.category_len = 0;
+                        comp_header_ref.component_type_len = 0;
+                    }
+                    tcb_level_header.tdx_tcb_components_present = 0;
+                    tcb_level_header.tdx_components_strings_total_len = 0;
+                },
             }
+            tcb_level_header.sgx_components_strings_total_len =
+                sgx_components_payload_strings.len() as u32;
 
-            Tcb::V3(TcbV3 {
-                sgxtcbcomponents,
-                pcesvn: tcb_level_pod.pce_svn,
-                tdxtcbcomponents,
-            })
-        } else {
-            // Create V2 TCB
-            let svns = tcb_level_pod.sgx_tcb_components.map(|comp| comp.cpusvn);
-
-            Tcb::V2(TcbV2 {
-                sgxtcbcomp01svn: svns[0],
-                sgxtcbcomp02svn: svns[1],
-                sgxtcbcomp03svn: svns[2],
-                sgxtcbcomp04svn: svns[3],
-                sgxtcbcomp05svn: svns[4],
-                sgxtcbcomp06svn: svns[5],
-                sgxtcbcomp07svn: svns[6],
-                sgxtcbcomp08svn: svns[7],
-                sgxtcbcomp09svn: svns[8],
-                sgxtcbcomp10svn: svns[9],
-                sgxtcbcomp11svn: svns[10],
-                sgxtcbcomp12svn: svns[11],
-                sgxtcbcomp13svn: svns[12],
-                sgxtcbcomp14svn: svns[13],
-                sgxtcbcomp15svn: svns[14],
-                sgxtcbcomp16svn: svns[15],
-                pcesvn: tcb_level_pod.pce_svn,
-            })
-        };
-
-        let tcb_date =
-            chrono::DateTime::<chrono::Utc>::from_timestamp(tcb_level_pod.tcb_date as i64, 0)
-                .ok_or("Invalid tcb_date timestamp")?;
-
-        Ok(TcbLevel {
-            tcb,
-            tcb_date,
-            tcb_status,
-            advisory_ids: if advisory_ids.is_empty() {
-                None
+            let mut tcb_level_advisory_id_lengths_bytes = Vec::new();
+            let mut tcb_level_advisory_id_data_bytes = Vec::new();
+            if let Some(advisory_ids) = &rust_tcb_level.advisory_ids {
+                tcb_level_header.advisory_ids_count = advisory_ids.len() as u32;
+                for adv_id in advisory_ids {
+                    let adv_id_bytes = adv_id.as_bytes();
+                    tcb_level_advisory_id_lengths_bytes
+                        .extend_from_slice(&(adv_id_bytes.len() as u16).to_le_bytes());
+                    tcb_level_advisory_id_data_bytes.extend_from_slice(adv_id_bytes);
+                }
             } else {
-                Some(advisory_ids)
-            },
+                tcb_level_header.advisory_ids_count = 0;
+            }
+            tcb_level_header.advisory_ids_lengths_array_len =
+                tcb_level_advisory_id_lengths_bytes.len() as u32;
+            tcb_level_header.advisory_ids_data_total_len =
+                tcb_level_advisory_id_data_bytes.len() as u32;
+
+            payload_bytes.extend_from_slice(bytemuck::bytes_of(&tcb_level_header));
+            current_payload_offset += core::mem::size_of::<TcbLevelHeader>();
+
+            payload_bytes.extend_from_slice(&sgx_components_payload_strings);
+            current_payload_offset += sgx_components_payload_strings.len();
+
+            if tcb_level_header.tdx_tcb_components_present == 1 {
+                payload_bytes.extend_from_slice(&tdx_components_payload_strings_for_level);
+                current_payload_offset += tdx_components_payload_strings_for_level.len();
+            }
+            payload_bytes.extend_from_slice(&tcb_level_advisory_id_lengths_bytes);
+            current_payload_offset += tcb_level_advisory_id_lengths_bytes.len();
+            payload_bytes.extend_from_slice(&tcb_level_advisory_id_data_bytes);
+            current_payload_offset += tcb_level_advisory_id_data_bytes.len();
+
+            // Add padding for the *next* TcbLevelHeader
+            let padding_added_for_next_tcb_level = append_padding_to_align(
+                &mut payload_bytes,
+                mem::align_of::<TcbLevelHeader>() // Align to 8
+            );
+            current_payload_offset += padding_added_for_next_tcb_level;
+        }
+        header.tcb_levels_total_payload_len =
+            (current_payload_offset - tcb_levels_payload_start) as u32;
+
+        Ok(SerializedTcbInfo {
+            header,
+            payload: payload_bytes,
         })
     }
+}
+
+// --- TcbPod Serialization and Deserialization ---
+
+/// Serializes a TcbPod into a byte vector.
+/// The layout will be: signature | TcbInfoHeader | payload.
+pub fn serialize_tcb_pod(serialized_tcb_info: &SerializedTcbInfo, signature: &[u8; 64]) -> Vec<u8> {
+    let header_bytes = bytemuck::bytes_of(&serialized_tcb_info.header);
+    let mut tcb_pod_bytes = Vec::with_capacity(
+        signature.len() + header_bytes.len() + serialized_tcb_info.payload.len(),
+    );
+    tcb_pod_bytes.extend_from_slice(signature);
+    tcb_pod_bytes.extend_from_slice(header_bytes);
+    tcb_pod_bytes.extend_from_slice(&serialized_tcb_info.payload);
+    tcb_pod_bytes
+}
+
+/// Parses a byte slice representing a TcbPod into an application-level TcbInfo and the signature.
+/// Expects bytes in the layout: signature | TcbInfoHeader | payload.
+pub fn parse_tcb_pod_bytes(pod_bytes: &[u8]) -> Result<(TcbInfo, [u8; 64]), String> {
+    let min_len = core::mem::size_of::<[u8; 64]>() + core::mem::size_of::<TcbInfoHeader>();
+    if pod_bytes.len() < min_len {
+        return Err(format!(
+            "Byte slice too short for TcbPod. Expected at least {} bytes, got {}",
+            min_len,
+            pod_bytes.len()
+        ));
+    }
+
+    let signature_slice = pod_bytes
+        .get(..64)
+        .ok_or_else(|| "Failed to slice signature".to_string())?;
+    let mut signature = [0u8; 64];
+    signature.copy_from_slice(signature_slice);
+
+    let tcb_info_and_payload_bytes = pod_bytes
+        .get(64..)
+        .ok_or_else(|| "Failed to slice TCB info header and payload".to_string())?;
+
+    let tcb_info_view = TcbInfoZeroCopy::from_bytes(tcb_info_and_payload_bytes)
+        .map_err(|e| format!("Failed to create TcbInfoZeroCopy: {:?}", e))?;
+
+    let rust_tcb_info = tcb_info_from_zero_copy(&tcb_info_view)
+        .map_err(|e| format!("Failed to convert TcbInfoZeroCopy to TcbInfo: {:?}", e))?;
+
+    Ok((rust_tcb_info, signature))
 }

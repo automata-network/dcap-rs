@@ -75,7 +75,7 @@ impl TcbInfoAndSignature {
 /// version is V3. The V3 API includes advisoryIDs and changes the format of
 /// the TcbLevel
 
-#[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug, Eq, PartialEq)]
 #[serde(try_from = "u32", into = "u32")]
 pub enum TcbInfoVersion {
     V2 = 2,
