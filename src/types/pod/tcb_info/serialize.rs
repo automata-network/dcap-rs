@@ -58,8 +58,8 @@ impl SerializedTcbInfo {
 
         header.id_type = string_to_fixed_bytes::<6>(rust_tcb_info.id.as_deref().unwrap_or(""));
         header.version = rust_tcb_info.version as u32; // TcbInfoVersion derives Copy
-        header.issue_date_timestamp = rust_tcb_info.issue_date.timestamp() as u64;
-        header.next_update_timestamp = rust_tcb_info.next_update.timestamp() as u64;
+        header.issue_date_timestamp = rust_tcb_info.issue_date.timestamp();
+        header.next_update_timestamp = rust_tcb_info.next_update.timestamp();
         header.fmspc_hex = hex_chars_to_fixed_bytes::<12>(&rust_tcb_info.fmspc);
         header.pce_id_hex = hex_chars_to_fixed_bytes::<4>(&rust_tcb_info.pce_id);
         header.tcb_type = rust_tcb_info.tcb_type;
@@ -102,7 +102,7 @@ impl SerializedTcbInfo {
                     tdx_tcb_level_header.tcb_isvsvn = tdx_tcb_level.tcb.isvsvn;
                     tdx_tcb_level_header.tcb_status = tdx_tcb_level.tcb_status as u8;
                     tdx_tcb_level_header.tcb_date_timestamp =
-                        tdx_tcb_level.tcb_date.timestamp() as u64;
+                        tdx_tcb_level.tcb_date.timestamp();
 
                     let mut advisory_id_lengths_bytes = Vec::new();
                     let mut advisory_id_data_bytes = Vec::new();
@@ -173,7 +173,7 @@ impl SerializedTcbInfo {
             let mut tcb_level_header = TcbLevelHeader::zeroed();
             tcb_level_header.tcb_status = rust_tcb_level.tcb_status as u8;
             tcb_level_header.pce_svn = rust_tcb_level.tcb.pcesvn();
-            tcb_level_header.tcb_date_timestamp = rust_tcb_level.tcb_date.timestamp() as u64;
+            tcb_level_header.tcb_date_timestamp = rust_tcb_level.tcb_date.timestamp();
 
             let mut sgx_components_payload_strings = Vec::new();
             let mut tdx_components_payload_strings_for_level = Vec::new();

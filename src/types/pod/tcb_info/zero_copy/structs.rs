@@ -73,8 +73,8 @@ impl<'a> TcbInfoZeroCopy<'a> {
     // --- Direct Header Accessors ---
     pub fn id_type_bytes(&self) -> &'a [u8; 6] { &self.header.id_type }
     pub fn version(&self) -> u32 { self.header.version }
-    pub fn issue_date_timestamp(&self) -> u64 { self.header.issue_date_timestamp }
-    pub fn next_update_timestamp(&self) -> u64 { self.header.next_update_timestamp }
+    pub fn issue_date_timestamp(&self) -> i64 { self.header.issue_date_timestamp }
+    pub fn next_update_timestamp(&self) -> i64 { self.header.next_update_timestamp }
     pub fn fmspc_hex_bytes(&self) -> &'a [u8; 12] { &self.header.fmspc_hex }
     pub fn pce_id_hex_bytes(&self) -> &'a [u8; 4] { &self.header.pce_id_hex }
     pub fn tcb_type(&self) -> u8 { self.header.tcb_type }
@@ -173,7 +173,7 @@ impl<'a> TdxTcbLevelZeroCopy<'a> {
     pub fn tcb_status(&self) -> u8 { 
         self.header.tcb_status
     }
-    pub fn tcb_date_timestamp(&self) -> u64 { self.header.tcb_date_timestamp }
+    pub fn tcb_date_timestamp(&self) -> i64 { self.header.tcb_date_timestamp }
     pub fn advisory_ids_count(&self) -> u32 { self.header.advisory_ids_count }
     pub fn advisory_ids(&self) -> AdvisoryIdIter<'a> {
         AdvisoryIdIter::new(
@@ -278,7 +278,7 @@ impl<'a> TcbLevelZeroCopy<'a> {
         self.header.tcb_status
     }
     pub fn pce_svn(&self) -> u16 { self.header.pce_svn }
-    pub fn tcb_date_timestamp(&self) -> u64 { self.header.tcb_date_timestamp }
+    pub fn tcb_date_timestamp(&self) -> i64 { self.header.tcb_date_timestamp }
     pub fn sgx_tcb_components(&self) -> TcbComponentIter<'a> {
         TcbComponentIter::new(
             &self.header.sgx_tcb_components,

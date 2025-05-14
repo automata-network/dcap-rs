@@ -27,7 +27,7 @@ pub struct TdxTcbLevelHeader {
     pub tcb_isvsvn: u8,
     pub tcb_status: u8, // Represents crate::src::types::tcb_info::TcbStatus
     pub _padding0: [u8; 6], // Align tcb_date_timestamp to 8 bytes
-    pub tcb_date_timestamp: u64,
+    pub tcb_date_timestamp: i64,
     pub advisory_ids_count: u32,
     pub advisory_ids_lengths_array_len: u32, // Total byte length of the array of u16 lengths
     pub advisory_ids_data_total_len: u32,    // Total byte length of concatenated advisory ID strings
@@ -66,7 +66,7 @@ pub struct TcbLevelHeader {
     pub _padding0_a: u8, // Renamed to avoid conflict, aligns pce_svn
     pub pce_svn: u16,
     pub _padding1_a: [u8; 4], // Renamed, aligns tcb_date_timestamp
-    pub tcb_date_timestamp: u64,
+    pub tcb_date_timestamp: i64,
 
     pub sgx_tcb_components: [TcbComponentHeader; 16],
     pub tdx_tcb_components_present: u8, // 1 if present, 0 if not
@@ -92,8 +92,8 @@ pub struct TcbInfoHeader {
     pub _pad_id_type: [u8; 2], // Aligns version
     pub version: u32,     
     pub _pad_version: [u8; 4], // Aligns issue_date_timestamp
-    pub issue_date_timestamp: u64,
-    pub next_update_timestamp: u64,
+    pub issue_date_timestamp: i64,
+    pub next_update_timestamp: i64,
     pub fmspc_hex: [u8; 12],          
     pub pce_id_hex: [u8; 4],          
     pub tcb_type: u8,                 

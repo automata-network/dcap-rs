@@ -61,11 +61,11 @@ fn test_tcb_v2_sgx_bytemuck() {
     );
     assert_eq!(
         tcb_info_zero_copy.issue_date_timestamp(),
-        original_tcb_info.issue_date.timestamp() as u64
+        original_tcb_info.issue_date.timestamp()
     );
     assert_eq!(
         tcb_info_zero_copy.next_update_timestamp(),
-        original_tcb_info.next_update.timestamp() as u64
+        original_tcb_info.next_update.timestamp()
     );
     assert_eq!(
         from_utf8(tcb_info_zero_copy.fmspc_hex_bytes()).unwrap(),
@@ -103,7 +103,7 @@ fn test_tcb_v2_sgx_bytemuck() {
             .expect("Failed to get TCB level from view");
         assert_eq!(
             view_tcb_level.tcb_date_timestamp(),
-            tcb_level.tcb_date.timestamp() as u64
+            tcb_level.tcb_date.timestamp()
         );
         assert_eq!(
             TcbStatus::try_from(view_tcb_level.tcb_status()).unwrap(),
@@ -195,11 +195,11 @@ fn test_tcb_v3_sgx_bytemuck() {
     );
     assert_eq!(
         tcb_info_zero_copy.issue_date_timestamp(),
-        original_tcb_info.issue_date.timestamp() as u64
+        original_tcb_info.issue_date.timestamp()
     );
     assert_eq!(
         tcb_info_zero_copy.next_update_timestamp(),
-        original_tcb_info.next_update.timestamp() as u64
+        original_tcb_info.next_update.timestamp()
     );
     assert_eq!(
         from_utf8(tcb_info_zero_copy.fmspc_hex_bytes()).unwrap(),
@@ -237,7 +237,7 @@ fn test_tcb_v3_sgx_bytemuck() {
             .expect("Failed to get TCB level from view");
         assert_eq!(
             view_tcb_level.tcb_date_timestamp(),
-            tcb_level.tcb_date.timestamp() as u64
+            tcb_level.tcb_date.timestamp()
         );
         assert_eq!(
             TcbStatus::try_from(view_tcb_level.tcb_status()).unwrap(),
@@ -351,11 +351,11 @@ fn test_tcb_v3_tdx_bytemuck() {
     );
     assert_eq!(
         tcb_info_zero_copy.issue_date_timestamp(),
-        original_tcb_info.issue_date.timestamp() as u64
+        original_tcb_info.issue_date.timestamp()
     );
     assert_eq!(
         tcb_info_zero_copy.next_update_timestamp(),
-        original_tcb_info.next_update.timestamp() as u64
+        original_tcb_info.next_update.timestamp()
     );
     assert_eq!(
         from_utf8(tcb_info_zero_copy.fmspc_hex_bytes()).unwrap(),
@@ -441,7 +441,7 @@ fn test_tcb_v3_tdx_bytemuck() {
                         .expect("Failed to get TDX Module Identity TCB level from view");
                     assert_eq!(
                         view_tcb_level.tcb_date_timestamp(),
-                        tcb_level.tcb_date.timestamp() as u64
+                        tcb_level.tcb_date.timestamp()
                     );
                     assert_eq!(
                         TcbStatus::try_from(view_tcb_level.tcb_status()).unwrap(),
@@ -484,7 +484,7 @@ fn test_tcb_v3_tdx_bytemuck() {
             .expect("Failed to get TCB level from view");
         assert_eq!(
             view_tcb_level.tcb_date_timestamp(),
-            tcb_level.tcb_date.timestamp() as u64
+            tcb_level.tcb_date.timestamp()
         );
         assert_eq!(
             TcbStatus::try_from(view_tcb_level.tcb_status()).unwrap(),
