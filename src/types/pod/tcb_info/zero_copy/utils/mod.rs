@@ -1,10 +1,10 @@
-use super::zero_copy::{
+use super::{
     error::ZeroCopyError,
     structs::{TcbInfoZeroCopy, TcbLevelZeroCopy},
 };
 use crate::types::{
     quote::{Quote, QuoteBody},
-    sgx_x509::SgxPckExtension
+    sgx_x509::SgxPckExtension,
 };
 
 pub fn lookup<'a>(
@@ -107,7 +107,7 @@ fn pck_in_tcb_level_zc<'a>(
 
 #[cfg(all(test, not(feature = "zero-copy")))]
 mod tests {
-    use super::super::serialize::{SerializedTcbInfo, serialize_tcb_pod};
+    use crate::types::pod::tcb_info::serialize::{SerializedTcbInfo, serialize_tcb_pod};
     use crate::types::{
         pod::tcb_info::zero_copy::TcbInfoZeroCopy,
         quote::Quote,
@@ -116,8 +116,9 @@ mod tests {
 
     #[test]
     pub fn test_zero_copy_tcb_lookup() {
-        let quote_bytes = include_bytes!("../../../../data/quote_tdx.bin");
-        let tcb_info_json_bytes = include_bytes!("../../../../data/tcb_info_v3_with_tdx_module.json");
+        let quote_bytes = include_bytes!("../../../../../../data/quote_tdx.bin");
+        let tcb_info_json_bytes =
+            include_bytes!("../../../../../../data/tcb_info_v3_with_tdx_module.json");
 
         // Parse the quote and extract the PCK SGX extension
         let quote = Quote::read(&mut quote_bytes.as_slice()).unwrap();

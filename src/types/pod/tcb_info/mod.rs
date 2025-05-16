@@ -1,11 +1,11 @@
-use bytemuck::{Pod, Zeroable};
-pub mod utils;
 pub mod zero_copy;
 
 #[cfg(feature = "full")]
 pub mod serialize;
 #[cfg(all(test, not(feature = "zero-copy")))]
 mod tests;
+
+use bytemuck::{Pod, Zeroable};
 
 // --- New Header and Data Structs ---
 

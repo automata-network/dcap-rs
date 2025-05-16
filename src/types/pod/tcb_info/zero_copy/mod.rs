@@ -3,6 +3,7 @@
 pub mod error;
 pub mod structs;
 pub mod iterators;
+pub mod utils;
 
 #[cfg(feature = "full")]
 pub mod conversion;
