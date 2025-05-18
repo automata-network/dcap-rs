@@ -3,23 +3,23 @@ pub mod types;
 pub mod utils;
 
 #[cfg(feature = "full")]
-use std::time::SystemTime;
-#[cfg(feature = "full")]
 use anyhow::{Context, anyhow, bail};
 #[cfg(feature = "full")]
 use chrono::{DateTime, Utc};
 #[cfg(feature = "full")]
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 #[cfg(feature = "full")]
+use std::time::SystemTime;
+#[cfg(feature = "full")]
 use trust_store::{TrustStore, TrustedIdentity};
 #[cfg(feature = "full")]
 use types::{
     VerifiedOutput,
+    collateral::Collateral,
     enclave_identity::QeTcbStatus,
     quote::{AttestationKeyType, Quote, TDX_TEE_TYPE},
     sgx_x509::SgxPckExtension,
     tcb_info::{TcbInfo, TcbStatus},
-    collateral::Collateral
 };
 #[cfg(feature = "full")]
 use utils::Expireable;
@@ -233,10 +233,14 @@ pub fn verify_quote_enclave_source(
     }
 
     // Compare the mr_signer values
-    if qe_identity.mrsigner != quote.signature.qe_report_body.mr_signer {
+    let qe_identity_mr_signer_bytes: [u8; 32] = hex::decode(qe_identity.mrsigner.as_str())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    if qe_identity_mr_signer_bytes != quote.signature.qe_report_body.mr_signer {
         bail!(
             "invalid qe mrsigner, expected {} but got {}",
-            hex::encode(qe_identity.mrsigner),
+            qe_identity.mrsigner.as_str(),
             hex::encode(quote.signature.qe_report_body.mr_signer)
         );
     }
@@ -252,14 +256,17 @@ pub fn verify_quote_enclave_source(
 
     // Compare the attribute values
     let qe_report_attributes = quote.signature.qe_report_body.sgx_attributes;
-    let calculated_mask = qe_identity
-        .attributes_mask
+    let qe_identity_attributes_bytes: [u8; 16] = hex::decode(qe_identity.attributes.as_str())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let calculated_mask = qe_identity_attributes_bytes
         .iter()
         .zip(qe_report_attributes.iter())
         .map(|(&mask, &attribute)| mask & attribute);
 
     if calculated_mask
-        .zip(qe_identity.attributes)
+        .zip(qe_identity_attributes_bytes)
         .any(|(masked, identity)| masked != identity)
     {
         bail!("qe attrtibutes mismatch");
@@ -267,15 +274,17 @@ pub fn verify_quote_enclave_source(
 
     // Compare misc_select values
     let misc_select = quote.signature.qe_report_body.misc_select;
-    let calculated_mask = qe_identity
-        .miscselect_mask
-        .as_bytes()
+    let qe_identity_misc_select_bytes: [u8; 4] = hex::decode(qe_identity.miscselect.as_str())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let calculated_mask = qe_identity_misc_select_bytes
         .iter()
         .zip(misc_select.as_bytes().iter())
         .map(|(&mask, &attribute)| mask & attribute);
 
     if calculated_mask
-        .zip(qe_identity.miscselect.as_bytes().iter())
+        .zip(qe_identity_misc_select_bytes.iter())
         .any(|(masked, &identity)| masked != identity)
     {
         bail!("qe misc_select mismatch");
@@ -381,13 +390,10 @@ mod tests {
 
     use x509_cert::{crl::CertificateList, der::Decode};
 
-    use crate::{
-        types::{
-            enclave_identity::QuotingEnclaveIdentityAndSignature,
-        },
-        utils::cert_chain_processor,
-    };
     use crate::types::tcb_info::TcbInfoAndSignature;
+    use crate::{
+        types::enclave_identity::QuotingEnclaveIdentityAndSignature, utils::cert_chain_processor,
+    };
 
     use super::*;
 

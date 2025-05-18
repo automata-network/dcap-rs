@@ -1,5 +1,3 @@
-use super::UInt32LE;
-use crate::utils::u32_hex;
 use anyhow::Context;
 use chrono::Utc;
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
@@ -8,7 +6,7 @@ use serde_json::value::RawValue;
 #[cfg(feature = "full")]
 use super::tcb_info::TcbStatus;
 
-const ENCLAVE_IDENTITY_V2: u16 = 2;
+const ENCLAVE_IDENTITY_V2: u32 = 2;
 
 #[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,7 +70,7 @@ pub struct EnclaveIdentity {
     pub id: EnclaveType,
 
     /// Version of the structure.
-    pub version: u16,
+    pub version: u32,
 
     /// The time the Enclave Identity Information was created. The time shalle be in UTC
     /// and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
@@ -92,24 +90,19 @@ pub struct EnclaveIdentity {
     pub tcb_evaluation_data_number: u16,
 
     /// Base 16-encoded string representing miscselect "golden" value (upon applying mask).
-    #[serde(with = "u32_hex")]
-    pub miscselect: UInt32LE,
+    pub miscselect: String,
 
     /// Base 16-encoded string representing mask to be applied to miscselect value retrieved from the platform.
-    #[serde(with = "u32_hex")]
-    pub miscselect_mask: UInt32LE,
+    pub miscselect_mask: String,
 
     /// Base 16-encoded string representing attributes "golden" value (upon applying mask).
-    #[serde(with = "hex")]
-    pub attributes: [u8; 16],
+    pub attributes: String,
 
     /// Base 16-encoded string representing mask to be applied to attributes value retrieved from the platform.
-    #[serde(with = "hex")]
-    pub attributes_mask: [u8; 16],
+    pub attributes_mask: String,
 
     /// Base 16-encoded string representing mrsigner hash.
-    #[serde(with = "hex")]
-    pub mrsigner: [u8; 32],
+    pub mrsigner: String,
 
     /// Enclave Product ID.
     pub isvprodid: u16,
@@ -133,12 +126,12 @@ impl EnclaveIdentity {
 #[serde(rename_all = "camelCase")]
 pub struct QeTcbLevel {
     /// SGX Enclave's ISV SVN
-    tcb: QeTcb,
+    pub tcb: QeTcb,
     /// The time the TCB was evaluated. The time shall be in UTC and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
    
-    _tcb_date: chrono::DateTime<Utc>,
+    pub tcb_date: chrono::DateTime<Utc>,
     /// TCB level status
-    tcb_status: QeTcbStatus,
+    pub tcb_status: QeTcbStatus,
     #[serde(rename = "advisoryIDs")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub advisory_ids: Option<Vec<String>>,
@@ -225,59 +218,22 @@ pub enum EnclaveType {
 }
 
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
 
-//     #[test]
-//     fn test_enclave_identity_serialization() {
-//         let qe_identity = include_bytes!("../../data/qeidentityv2_apiv4.json");
-//         let qe_identity: QuotingEnclaveIdentityAndSignature = serde_json::from_slice(qe_identity).unwrap();
-//         let original_qe_identity = qe_identity.get_enclave_identity().unwrap();
+    #[test]
+    fn test_enclave_identity_serialization() {
+        let qe_identity = include_bytes!("../../data/qeidentityv2_apiv4.json");
+        let qe_identity: QuotingEnclaveIdentityAndSignature = serde_json::from_slice(qe_identity).unwrap();
+        let qe_identity_parsed = qe_identity.get_enclave_identity().unwrap();
 
-//         let enclave_identity_bytes = borsh::to_vec(&original_qe_identity).unwrap();
-//         let deserialized_qe_identity = EnclaveIdentity::try_from_slice(&enclave_identity_bytes).unwrap();
+        let original_qe_identity_hash = Sha256::digest(qe_identity.enclave_identity_raw.get().as_bytes());
 
-//         // Verify that the deserialized enclave identity matches the original
-//         assert_eq!(original_qe_identity.id, deserialized_qe_identity.id);
-//         assert_eq!(original_qe_identity.version, deserialized_qe_identity.version);
-//         assert_eq!(original_qe_identity.issue_date, deserialized_qe_identity.issue_date);
-//         assert_eq!(original_qe_identity.next_update, deserialized_qe_identity.next_update);
-//         assert_eq!(original_qe_identity.miscselect, deserialized_qe_identity.miscselect);
-//         assert_eq!(original_qe_identity.miscselect_mask, deserialized_qe_identity.miscselect_mask);
-//         assert_eq!(original_qe_identity.attributes, deserialized_qe_identity.attributes);
-//         assert_eq!(original_qe_identity.attributes_mask, deserialized_qe_identity.attributes_mask);
-//         assert_eq!(original_qe_identity.mrsigner, deserialized_qe_identity.mrsigner);
-//         assert_eq!(original_qe_identity.isvprodid, deserialized_qe_identity.isvprodid);
-//         assert_eq!(original_qe_identity.tcb_levels.len(), deserialized_qe_identity.tcb_levels.len());
+        let serialized_qe_identity = serde_json::to_string(&qe_identity_parsed).unwrap();
+        let serialized_qe_identity_hash = Sha256::digest(serialized_qe_identity.as_bytes());
 
-//         // Detailed verification of each tcb_level
-//         for (i, original_tcb_level) in original_qe_identity.tcb_levels.iter().enumerate() {
-//             let deserialized_tcb_level = &deserialized_qe_identity.tcb_levels[i];
-
-//             // Verify TCB values
-//             assert_eq!(original_tcb_level.tcb.isvsvn, deserialized_tcb_level.tcb.isvsvn);
-
-//             // Verify TCB date
-//             assert_eq!(original_tcb_level._tcb_date, deserialized_tcb_level._tcb_date);
-
-//             // Verify TCB status
-//             assert!(matches!(
-//                 &original_tcb_level.tcb_status,
-//                 status if std::mem::discriminant(status) == std::mem::discriminant(&deserialized_tcb_level.tcb_status)
-//             ));
-
-//             // Verify advisory IDs
-//             match (&original_tcb_level.advisory_ids, &deserialized_tcb_level.advisory_ids) {
-//                 (Some(original_ids), Some(deserialized_ids)) => {
-//                     assert_eq!(original_ids.len(), deserialized_ids.len());
-//                     for (j, original_id) in original_ids.iter().enumerate() {
-//                         assert_eq!(original_id, &deserialized_ids[j]);
-//                     }
-//                 },
-//                 (None, None) => {},
-//                 _ => panic!("Advisory IDs mismatch in TCB level {}", i),
-//             }
-//         }
-//     }
-// }
+        assert_eq!(original_qe_identity_hash, serialized_qe_identity_hash);
+    }
+}
