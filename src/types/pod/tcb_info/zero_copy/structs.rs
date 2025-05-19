@@ -7,7 +7,7 @@ use crate::types::pod::tcb_info::{
     TcbLevelHeader, TcbComponentHeader
 };
 use bytemuck::Pod;
-use core::str;
+use std::str::from_utf8;
 
 // --- Helper to cast slices ---
 // It's good practice to have this in a shared utility if used in multiple places,
@@ -21,7 +21,7 @@ fn cast_slice<'a, T: Pod>(slice: &'a [u8]) -> Result<&'a T, ZeroCopyError> {
 
 #[derive(Debug, Copy, Clone)]
 pub struct TcbInfoZeroCopy<'a> {
-    header: &'a TcbInfoHeader,
+    pub header: &'a TcbInfoHeader,
     tdx_module_data_payload: Option<&'a TdxModulePodData>, // Directly borrowed if present
     tdx_module_identities_section_payload: &'a [u8],
     tcb_levels_section_payload: &'a [u8],
@@ -75,8 +75,14 @@ impl<'a> TcbInfoZeroCopy<'a> {
     pub fn version(&self) -> u32 { self.header.version }
     pub fn issue_date_timestamp(&self) -> i64 { self.header.issue_date_timestamp }
     pub fn next_update_timestamp(&self) -> i64 { self.header.next_update_timestamp }
-    pub fn fmspc_hex_bytes(&self) -> &'a [u8; 12] { &self.header.fmspc_hex }
-    pub fn pce_id_hex_bytes(&self) -> &'a [u8; 4] { &self.header.pce_id_hex }
+    // Parses the hex string and returns the byte array
+    pub fn fmspc(&self) -> [u8; 6] { 
+        hex::decode(from_utf8(&self.header.fmspc_hex).unwrap()).unwrap().try_into().unwrap()
+    }
+    // Parses the hex string and returns the byte array
+    pub fn pce_id(&self) -> [u8; 2] { 
+        hex::decode(from_utf8(&self.header.pce_id_hex).unwrap()).unwrap().try_into().unwrap()
+     }
     pub fn tcb_type(&self) -> u8 { self.header.tcb_type }
     pub fn tcb_evaluation_data_number(&self) -> u32 { self.header.tcb_evaluation_data_number }
 
@@ -107,19 +113,25 @@ impl<'a> TcbInfoZeroCopy<'a> {
 // TdxModulePodDataZeroCopy (simple wrapper for already Pod data)
 #[derive(Debug, Copy, Clone)]
 pub struct TdxModulePodDataZeroCopy<'a> {
-    data: &'a TdxModulePodData,
+    pub data: &'a TdxModulePodData,
 }
 impl<'a> TdxModulePodDataZeroCopy<'a> {
     pub fn new(data: &'a TdxModulePodData) -> Self { Self { data } }
-    pub fn mrsigner_hex_bytes(&self) -> &'a [u8; 96] { &self.data.mrsigner_hex }
-    pub fn attributes_hex_bytes(&self) -> &'a [u8; 16] { &self.data.attributes_hex }
-    pub fn attributes_mask_hex_bytes(&self) -> &'a [u8; 16] { &self.data.attributes_mask_hex }
+    pub fn mrsigner(&self) -> [u8; 48] {
+        hex::decode(from_utf8(&self.data.mrsigner_hex).unwrap()).unwrap().try_into().unwrap()
+    }
+    pub fn attributes(&self) -> [u8; 8] { 
+        hex::decode(from_utf8(&self.data.attributes_hex).unwrap()).unwrap().try_into().unwrap()
+    }
+    pub fn attributes_mask(&self) -> [u8; 8] { 
+        hex::decode(from_utf8(&self.data.attributes_mask_hex).unwrap()).unwrap().try_into().unwrap()
+    }
 }
 
 // TcbComponentZeroCopy
 #[derive(Debug, Copy, Clone)]
 pub struct TcbComponentZeroCopy<'a> {
-    header: &'a TcbComponentHeader,
+    pub header: &'a TcbComponentHeader,
     category_payload: &'a [u8],
     component_type_payload: &'a [u8],
 }
@@ -140,10 +152,10 @@ impl<'a> TcbComponentZeroCopy<'a> {
     }
     pub fn cpusvn(&self) -> u8 { self.header.cpusvn }
     pub fn category_str(&self) -> Result<&'a str, ZeroCopyError> {
-        str::from_utf8(self.category_payload).map_err(|_| ZeroCopyError::InvalidUtf8)
+        from_utf8(self.category_payload).map_err(|_| ZeroCopyError::InvalidUtf8)
     }
     pub fn component_type_str(&self) -> Result<&'a str, ZeroCopyError> {
-        str::from_utf8(self.component_type_payload).map_err(|_| ZeroCopyError::InvalidUtf8)
+        from_utf8(self.component_type_payload).map_err(|_| ZeroCopyError::InvalidUtf8)
     }
 }
 
@@ -187,7 +199,7 @@ impl<'a> TdxTcbLevelZeroCopy<'a> {
 // TdxModuleIdentityZeroCopy
 #[derive(Debug, Copy, Clone)]
 pub struct TdxModuleIdentityZeroCopy<'a> {
-    header: &'a TdxModuleIdentityHeader,
+    pub header: &'a TdxModuleIdentityHeader,
     id_payload: &'a [u8], // Slice for the ID string
     tcb_levels_section_payload: &'a [u8], // Slice for all TdxTcbLevels of this identity
 }
@@ -212,11 +224,17 @@ impl<'a> TdxModuleIdentityZeroCopy<'a> {
             tcb_levels_section_payload: &payload[offset .. offset + tcb_levels_len],
         })
     }
-    pub fn mrsigner_hex_bytes(&self) -> &'a [u8; 96] { &self.header.mrsigner_hex }
-    pub fn attributes_hex_bytes(&self) -> &'a [u8; 16] { &self.header.attributes_hex }
-    pub fn attributes_mask_hex_bytes(&self) -> &'a [u8; 16] { &self.header.attributes_mask_hex }
+    pub fn mrsigner(&self) -> [u8; 48] {
+        hex::decode(from_utf8(&self.header.mrsigner_hex).unwrap()).unwrap().try_into().unwrap()
+    }
+    pub fn attributes(&self) -> [u8; 8] { 
+        hex::decode(from_utf8(&self.header.attributes_hex).unwrap()).unwrap().try_into().unwrap()
+    }
+    pub fn attributes_mask(&self) -> [u8; 8] { 
+        hex::decode(from_utf8(&self.header.attributes_mask_hex).unwrap()).unwrap().try_into().unwrap()
+    }
     pub fn id_str(&self) -> Result<&'a str, ZeroCopyError> {
-        str::from_utf8(self.id_payload).map_err(|_| ZeroCopyError::InvalidUtf8)
+        from_utf8(self.id_payload).map_err(|_| ZeroCopyError::InvalidUtf8)
     }
     pub fn tcb_levels_count(&self) -> u32 { self.header.tcb_levels_count }
     pub fn tcb_levels(&self) -> TdxTcbLevelIter<'a> {
@@ -227,7 +245,7 @@ impl<'a> TdxModuleIdentityZeroCopy<'a> {
 // TcbLevelZeroCopy
 #[derive(Debug, Copy, Clone)]
 pub struct TcbLevelZeroCopy<'a> {
-    header: &'a TcbLevelHeader,
+    pub header: &'a TcbLevelHeader,
     sgx_components_strings_payload: &'a [u8],
     tdx_components_strings_payload: Option<&'a [u8]>,
     advisory_ids_lengths_payload: &'a [u8],

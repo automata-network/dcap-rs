@@ -44,14 +44,14 @@ pub fn tcb_info_from_zero_copy(view: &TcbInfoZeroCopy) -> Result<TcbInfo, ZeroCo
         .single()
         .ok_or(ZeroCopyError::InvalidOffset)?;
 
-    let fmspc = zero_copy_bytes_to_string(view.fmspc_hex_bytes());
-    let pce_id = zero_copy_bytes_to_string(view.pce_id_hex_bytes());
+    let fmspc = zero_copy_bytes_to_string(&view.header.fmspc_hex);
+    let pce_id = zero_copy_bytes_to_string(&view.header.pce_id_hex);
 
     let tdx_module: Option<TdxModule> = match view.tdx_module() {
         Some(tdx_mod_view) => Some(TdxModule {
-            mrsigner: zero_copy_bytes_to_string(tdx_mod_view.mrsigner_hex_bytes()),
-            attributes: zero_copy_bytes_to_string(tdx_mod_view.attributes_hex_bytes()),
-            attributes_mask: zero_copy_bytes_to_string(tdx_mod_view.attributes_mask_hex_bytes()),
+            mrsigner: zero_copy_bytes_to_string(&tdx_mod_view.data.mrsigner_hex),
+            attributes: zero_copy_bytes_to_string(&tdx_mod_view.data.attributes_hex),
+            attributes_mask: zero_copy_bytes_to_string(&tdx_mod_view.data.attributes_mask_hex),
         }),
         None => None,
     };
@@ -91,10 +91,10 @@ pub fn tcb_info_from_zero_copy(view: &TcbInfoZeroCopy) -> Result<TcbInfo, ZeroCo
             }
             let identity_app = TdxModuleIdentity {
                 id: identity_view.id_str()?.to_string(),
-                mrsigner: zero_copy_bytes_to_string(identity_view.mrsigner_hex_bytes()),
-                attributes: zero_copy_bytes_to_string(identity_view.attributes_hex_bytes()),
+                mrsigner: zero_copy_bytes_to_string(&identity_view.header.mrsigner_hex),
+                attributes: zero_copy_bytes_to_string(&identity_view.header.attributes_hex),
                 attributes_mask: zero_copy_bytes_to_string(
-                    identity_view.attributes_mask_hex_bytes(),
+                    &identity_view.header.attributes_mask_hex,
                 ),
                 tcb_levels: tdx_tcb_levels_for_identity_vec,
             };

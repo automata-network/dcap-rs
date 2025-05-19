@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::{str::from_utf8, time::SystemTime};
 
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
@@ -121,6 +121,20 @@ pub struct TcbInfo {
 }
 
 impl TcbInfo {
+    pub fn fmspc_bytes(&self) -> [u8; 6] {
+        hex::decode(from_utf8(self.fmspc.as_bytes()).unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap()
+    }
+
+    pub fn pce_id_bytes(&self) -> [u8; 2] {
+        hex::decode(from_utf8(self.pce_id.as_bytes()).unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap()
+    }
+
     pub fn verify_tdx_module(&self, quote_body: &Td10ReportBody) -> anyhow::Result<TcbStatus> {
         if self.tdx_module.is_none() {
             return Err(anyhow::anyhow!("no tdx module found in tcb info"));
@@ -411,6 +425,29 @@ pub struct TdxModule {
     pub attributes_mask: String,
 }
 
+impl TdxModule {
+    pub fn mrsigner_bytes(&self) -> [u8; 48] {
+        hex::decode(from_utf8(self.mrsigner.as_bytes()).unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap()
+    }
+
+    pub fn attributes_bytes(&self) -> [u8; 8] {
+        hex::decode(from_utf8(self.attributes.as_bytes()).unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap()
+    }
+
+    pub fn attributes_mask_bytes(&self) -> [u8; 8] {
+        hex::decode(from_utf8(self.attributes_mask.as_bytes()).unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap()
+    }
+}
+
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TdxModuleIdentity {
@@ -421,6 +458,29 @@ pub struct TdxModuleIdentity {
     pub attributes: String,
     pub attributes_mask: String,
     pub tcb_levels: Vec<TdxTcbLevel>,
+}
+
+impl TdxModuleIdentity {
+    pub fn mrsigner_bytes(&self) -> [u8; 48] {
+        hex::decode(from_utf8(self.mrsigner.as_bytes()).unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap()
+    }
+
+    pub fn attributes_bytes(&self) -> [u8; 8] {
+        hex::decode(from_utf8(self.attributes.as_bytes()).unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap()
+    }
+
+    pub fn attributes_mask_bytes(&self) -> [u8; 8] {
+        hex::decode(from_utf8(self.attributes_mask.as_bytes()).unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap()
+    }
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]

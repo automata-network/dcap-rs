@@ -5,7 +5,6 @@ use crate::types::pod::enclave_identity::serialize::{
 };
 use crate::types::pod::enclave_identity::zero_copy::EnclaveIdentityZeroCopy;
 use sha2::{Digest, Sha256};
-use std::str::from_utf8;
 
 #[test]
 fn test_enclave_identity_bytemuck() {
@@ -73,28 +72,28 @@ fn test_enclave_identity_bytemuck() {
     );
 
     assert_eq!(
-        from_utf8(enclave_identity_zero_copy.miscselect_hex_bytes()).unwrap(),
-        original_enclave_identity.miscselect
+        enclave_identity_zero_copy.miscselect_bytes(),
+        original_enclave_identity.miscselect_bytes()
     );
 
     assert_eq!(
-        from_utf8(enclave_identity_zero_copy.miscselect_mask_hex_bytes()).unwrap(),
-        original_enclave_identity.miscselect_mask
+        enclave_identity_zero_copy.miscselect_mask_bytes(),
+        original_enclave_identity.miscselect_mask_bytes()
     );
 
     assert_eq!(
-        from_utf8(enclave_identity_zero_copy.attributes_hex_bytes()).unwrap(),
-        original_enclave_identity.attributes
+        enclave_identity_zero_copy.attributes_bytes(),
+        original_enclave_identity.attributes_bytes()
     );
 
     assert_eq!(
-        from_utf8(enclave_identity_zero_copy.attributes_mask_hex_bytes()).unwrap(),
-        original_enclave_identity.attributes_mask
+        enclave_identity_zero_copy.attributes_mask_bytes(),
+        original_enclave_identity.attributes_mask_bytes()
     );
 
     assert_eq!(
-        from_utf8(enclave_identity_zero_copy.mrsigner_hex_bytes()).unwrap(),
-        original_enclave_identity.mrsigner
+        enclave_identity_zero_copy.mrsigner_bytes(),
+        original_enclave_identity.mrsigner_bytes()
     );
 
     assert_eq!(

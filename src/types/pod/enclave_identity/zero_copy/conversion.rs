@@ -91,11 +91,11 @@ pub fn enclave_identity_from_zero_copy(
             .single()
             .ok_or(ZeroCopyError::InvalidOffset)?,
         tcb_evaluation_data_number: view.tcb_evaluation_data_number(),
-        miscselect: zero_copy_bytes_to_string(view.miscselect_hex_bytes()),
-        miscselect_mask: zero_copy_bytes_to_string(view.miscselect_mask_hex_bytes()),
-        attributes: zero_copy_bytes_to_string(view.attributes_hex_bytes()),
-        attributes_mask: zero_copy_bytes_to_string(view.attributes_mask_hex_bytes()),
-        mrsigner: zero_copy_bytes_to_string(view.mrsigner_hex_bytes()),
+        miscselect: zero_copy_bytes_to_string(&view.header.miscselect_hex),
+        miscselect_mask: zero_copy_bytes_to_string(&view.header.miscselect_mask_hex),
+        attributes: zero_copy_bytes_to_string(&view.header.attributes_hex),
+        attributes_mask: zero_copy_bytes_to_string(&view.header.attributes_mask_hex),
+        mrsigner: zero_copy_bytes_to_string(&view.header.mrsigner_hex),
         isvprodid: view.isvprodid(),
         tcb_levels: tcb_levels_vec,
     })

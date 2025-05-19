@@ -17,7 +17,7 @@ fn cast_slice<'a, T: Pod>(slice: &'a [u8]) -> Result<&'a T, ZeroCopyError> {
 
 #[derive(Debug, Copy, Clone)]
 pub struct EnclaveIdentityZeroCopy<'a> {
-    header: &'a EnclaveIdentityHeader,
+    pub header: &'a EnclaveIdentityHeader,
     tcb_levels_section_payload: &'a [u8], // Payload for all QeTcbLevel items
 }
 
@@ -52,11 +52,36 @@ impl<'a> EnclaveIdentityZeroCopy<'a> {
     pub fn next_update_timestamp(&self) -> i64 { self.header.next_update_timestamp }
     pub fn tcb_evaluation_data_number(&self) -> u16 { self.header.tcb_evaluation_data_number }
     pub fn isvprodid(&self) -> u16 { self.header.isvprodid }
-    pub fn miscselect_hex_bytes(&self) -> &'a [u8; 8] { &self.header.miscselect_hex }
-    pub fn miscselect_mask_hex_bytes(&self) -> &'a [u8; 8] { &self.header.miscselect_mask_hex }
-    pub fn attributes_hex_bytes(&self) -> &'a [u8; 32] { &self.header.attributes_hex }
-    pub fn attributes_mask_hex_bytes(&self) -> &'a [u8; 32] { &self.header.attributes_mask_hex }
-    pub fn mrsigner_hex_bytes(&self) -> &'a [u8; 64] { &self.header.mrsigner_hex }
+    pub fn miscselect_bytes(&self) -> [u8; 4] { 
+        hex::decode(&self.header.miscselect_hex)
+            .expect("Failed to decode miscselect_hex")
+            .try_into()
+            .expect("Failed to convert miscselect_hex to byte array")
+     }
+    pub fn miscselect_mask_bytes(&self) -> [u8; 4] { 
+        hex::decode(&self.header.miscselect_mask_hex)
+            .expect("Failed to decode miscselect_mask_hex")
+            .try_into()
+            .expect("Failed to convert miscselect_mask_hex to byte array")
+     }
+    pub fn attributes_bytes(&self) -> [u8; 16] { 
+        hex::decode(&self.header.attributes_hex)
+            .expect("Failed to decode attributes_hex")
+            .try_into()
+            .expect("Failed to convert attributes_hex to byte array")
+     }
+    pub fn attributes_mask_bytes(&self) -> [u8; 16] { 
+        hex::decode(&self.header.attributes_mask_hex)
+            .expect("Failed to decode attributes_mask_hex")
+            .try_into()
+            .expect("Failed to convert attributes_mask_hex to byte array")
+     }
+    pub fn mrsigner_bytes(&self) -> [u8; 32] { 
+        hex::decode(&self.header.mrsigner_hex)
+            .expect("Failed to decode mrsigner_hex")
+            .try_into()
+            .expect("Failed to convert mrsigner_hex to byte array")
+     }
     
     // --- Parsed/Structured Accessors ---
     pub fn tcb_levels_count(&self) -> u32 { self.header.tcb_levels_count }

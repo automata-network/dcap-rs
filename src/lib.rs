@@ -233,10 +233,7 @@ pub fn verify_quote_enclave_source(
     }
 
     // Compare the mr_signer values
-    let qe_identity_mr_signer_bytes: [u8; 32] = hex::decode(qe_identity.mrsigner.as_str())
-        .unwrap()
-        .try_into()
-        .unwrap();
+    let qe_identity_mr_signer_bytes: [u8; 32] = qe_identity.mrsigner_bytes();
     if qe_identity_mr_signer_bytes != quote.signature.qe_report_body.mr_signer {
         bail!(
             "invalid qe mrsigner, expected {} but got {}",
@@ -256,10 +253,7 @@ pub fn verify_quote_enclave_source(
 
     // Compare the attribute values
     let qe_report_attributes = quote.signature.qe_report_body.sgx_attributes;
-    let qe_identity_attributes_bytes: [u8; 16] = hex::decode(qe_identity.attributes.as_str())
-        .unwrap()
-        .try_into()
-        .unwrap();
+    let qe_identity_attributes_bytes: [u8; 16] = qe_identity.attributes_bytes();
     let calculated_mask = qe_identity_attributes_bytes
         .iter()
         .zip(qe_report_attributes.iter())
@@ -274,10 +268,7 @@ pub fn verify_quote_enclave_source(
 
     // Compare misc_select values
     let misc_select = quote.signature.qe_report_body.misc_select;
-    let qe_identity_misc_select_bytes: [u8; 4] = hex::decode(qe_identity.miscselect.as_str())
-        .unwrap()
-        .try_into()
-        .unwrap();
+    let qe_identity_misc_select_bytes: [u8; 4] = qe_identity.miscselect_bytes();
     let calculated_mask = qe_identity_misc_select_bytes
         .iter()
         .zip(misc_select.as_bytes().iter())
@@ -354,15 +345,9 @@ pub fn verify_tcb_status(
 ) -> anyhow::Result<(TcbStatus, TcbStatus, Vec<String>)> {
     // Make sure the tcb_info matches the enclave's model/PCE version
 
-    let tcb_info_fmspc_bytes: [u8; 6] = hex::decode(tcb_info.fmspc.as_str())
-        .unwrap()
-        .try_into()
-        .unwrap();
+    let tcb_info_fmspc_bytes: [u8; 6] = tcb_info.fmspc_bytes();
 
-    let tcb_info_pce_id_bytes: [u8; 2] = hex::decode(tcb_info.pce_id.as_str())
-        .unwrap()
-        .try_into()
-        .unwrap();
+    let tcb_info_pce_id_bytes: [u8; 2] = tcb_info.pce_id_bytes();
 
     if pck_extension.fmspc != tcb_info_fmspc_bytes {
         return Err(anyhow::anyhow!(

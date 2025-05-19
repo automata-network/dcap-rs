@@ -3,7 +3,6 @@ use super::zero_copy::*;
 use crate::types::tcb_info::*;
 
 use sha2::{Digest, Sha256};
-use std::str::from_utf8;
 
 #[test]
 fn test_tcb_v2_sgx_bytemuck() {
@@ -68,12 +67,12 @@ fn test_tcb_v2_sgx_bytemuck() {
         original_tcb_info.next_update.timestamp()
     );
     assert_eq!(
-        from_utf8(tcb_info_zero_copy.fmspc_hex_bytes()).unwrap(),
-        original_tcb_info.fmspc.as_str()
+        tcb_info_zero_copy.fmspc(),
+        original_tcb_info.fmspc_bytes()
     );
     assert_eq!(
-        from_utf8(tcb_info_zero_copy.pce_id_hex_bytes()).unwrap(),
-        original_tcb_info.pce_id.as_str()
+        tcb_info_zero_copy.pce_id(),
+        original_tcb_info.pce_id_bytes()
     );
     assert_eq!(tcb_info_zero_copy.tcb_type(), original_tcb_info.tcb_type);
     assert_eq!(
@@ -202,12 +201,12 @@ fn test_tcb_v3_sgx_bytemuck() {
         original_tcb_info.next_update.timestamp()
     );
     assert_eq!(
-        from_utf8(tcb_info_zero_copy.fmspc_hex_bytes()).unwrap(),
-        original_tcb_info.fmspc.as_str()
+        tcb_info_zero_copy.fmspc(),
+        original_tcb_info.fmspc_bytes()
     );
     assert_eq!(
-        from_utf8(tcb_info_zero_copy.pce_id_hex_bytes()).unwrap(),
-        original_tcb_info.pce_id.as_str()
+        tcb_info_zero_copy.pce_id(),
+        original_tcb_info.pce_id_bytes()
     );
     assert_eq!(tcb_info_zero_copy.tcb_type(), original_tcb_info.tcb_type);
     assert_eq!(
@@ -358,12 +357,12 @@ fn test_tcb_v3_tdx_bytemuck() {
         original_tcb_info.next_update.timestamp()
     );
     assert_eq!(
-        from_utf8(tcb_info_zero_copy.fmspc_hex_bytes()).unwrap(),
-        original_tcb_info.fmspc.as_str()
+        tcb_info_zero_copy.fmspc(),
+        original_tcb_info.fmspc_bytes()
     );
     assert_eq!(
-        from_utf8(tcb_info_zero_copy.pce_id_hex_bytes()).unwrap(),
-        original_tcb_info.pce_id.as_str()
+        tcb_info_zero_copy.pce_id(),
+        original_tcb_info.pce_id_bytes()
     );
     assert_eq!(tcb_info_zero_copy.tcb_type(), original_tcb_info.tcb_type);
     assert_eq!(
@@ -373,31 +372,28 @@ fn test_tcb_v3_tdx_bytemuck() {
 
     if let Some(tdx_module) = tcb_info_zero_copy.tdx_module() {
         assert_eq!(
-            from_utf8(tdx_module.mrsigner_hex_bytes()).unwrap(),
+            tdx_module.mrsigner(),
             original_tcb_info
                 .tdx_module
                 .as_ref()
                 .unwrap()
-                .mrsigner
-                .as_str()
+                .mrsigner_bytes()
         );
         assert_eq!(
-            from_utf8(tdx_module.attributes_hex_bytes()).unwrap(),
+            tdx_module.attributes(),
             original_tcb_info
                 .tdx_module
                 .as_ref()
                 .unwrap()
-                .attributes
-                .as_str()
+                .attributes_bytes()
         );
         assert_eq!(
-            from_utf8(tdx_module.attributes_mask_hex_bytes()).unwrap(),
+            tdx_module.attributes_mask(),
             original_tcb_info
                 .tdx_module
                 .as_ref()
                 .unwrap()
-                .attributes_mask
-                .as_str()
+                .attributes_mask_bytes()
         );
     } else {
         panic!("TDX module should be present in TcbV3 TDX");
@@ -410,16 +406,17 @@ fn test_tcb_v3_tdx_bytemuck() {
             let tdx_module_identity =
                 tdx_module_identity.expect("Failed to get TDX module identity from view");
             assert_eq!(
-                from_utf8(tdx_module_identity.mrsigner_hex_bytes()).unwrap(),
-                original_tdx_module_identities[i].mrsigner.as_str()
+                tdx_module_identity.mrsigner(),
+                original_tdx_module_identities[i]
+                    .mrsigner_bytes()
             );
             assert_eq!(
-                from_utf8(tdx_module_identity.attributes_hex_bytes()).unwrap(),
-                original_tdx_module_identities[i].attributes.as_str()
+                tdx_module_identity.attributes(),
+                original_tdx_module_identities[i].attributes_bytes()
             );
             assert_eq!(
-                from_utf8(tdx_module_identity.attributes_mask_hex_bytes()).unwrap(),
-                original_tdx_module_identities[i].attributes_mask.as_str()
+                tdx_module_identity.attributes_mask(),
+                original_tdx_module_identities[i].attributes_mask_bytes()
             );
             assert_eq!(
                 tdx_module_identity.id_str().unwrap(),

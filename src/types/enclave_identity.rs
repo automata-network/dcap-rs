@@ -62,7 +62,7 @@ impl QuotingEnclaveIdentityAndSignature {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EnclaveIdentity {
     /// Identifier of the SGX Enclave issued by Intel.
@@ -111,6 +111,41 @@ pub struct EnclaveIdentity {
 }
 
 impl EnclaveIdentity {
+    pub fn miscselect_bytes(&self) -> [u8; 4] {
+        hex::decode(&self.miscselect)
+            .expect("Failed to decode miscselect")
+            .try_into()
+            .expect("miscselect should be 4 bytes")
+    }
+
+    pub fn miscselect_mask_bytes(&self) -> [u8; 4] {
+        hex::decode(&self.miscselect_mask)
+            .expect("Failed to decode miscselect mask")
+            .try_into()
+            .expect("miscselect mask should be 4 bytes")
+    }
+
+    pub fn attributes_bytes(&self) -> [u8; 16] {
+        hex::decode(&self.attributes)
+            .expect("Failed to decode attributes")
+            .try_into()
+            .expect("attributes should be 16 bytes")
+    }
+
+    pub fn attributes_mask_bytes(&self) -> [u8; 16] {
+        hex::decode(&self.attributes_mask)
+            .expect("Failed to decode attributes mask")
+            .try_into()
+            .expect("attributes mask should be 16 bytes")
+    }
+
+    pub fn mrsigner_bytes(&self) -> [u8; 32] {
+        hex::decode(&self.mrsigner)
+            .expect("Failed to decode mrsigner")
+            .try_into()
+            .expect("mrsigner should be 32 bytes")
+    }
+
     pub fn get_qe_tcb_status(&self, isv_svn: u16) -> QeTcbStatus {
         self.tcb_levels
             .iter()
@@ -237,7 +272,7 @@ impl std::str::FromStr for QeTcbStatus {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 #[repr(u8)]
 pub enum EnclaveType {
