@@ -3,7 +3,6 @@ use chrono::Utc;
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
-#[cfg(feature = "full")]
 use super::tcb_info::TcbStatus;
 
 const ENCLAVE_IDENTITY_V2: u32 = 2;
@@ -122,7 +121,7 @@ impl EnclaveIdentity {
 }
 
 /// Enclave TCB level
-#[derive(Deserialize, Serialize, Debug, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct QeTcbLevel {
     /// SGX Enclave's ISV SVN
@@ -139,6 +138,7 @@ pub struct QeTcbLevel {
 
 /// TCB level status
 #[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
+#[repr(u8)]
 pub enum QeTcbStatus {
     /// TCB level of the SGX platform is up-to-date.
     UpToDate,
@@ -173,7 +173,39 @@ impl std::fmt::Display for QeTcbStatus {
     }
 }
 
-#[cfg(feature = "full")]
+impl TryFrom<u8> for QeTcbStatus {
+    type Error = &'static str;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(QeTcbStatus::UpToDate),
+            1 => Ok(QeTcbStatus::SWHardeningNeeded),
+            2 => Ok(QeTcbStatus::OutOfDate),
+            3 => Ok(QeTcbStatus::OutOfDateConfigurationNeeded),
+            4 => Ok(QeTcbStatus::ConfigurationNeeded),
+            5 => Ok(QeTcbStatus::ConfigurationAndSWHardeningNeeded),
+            6 => Ok(QeTcbStatus::Revoked),
+            7 => Ok(QeTcbStatus::Unspecified),
+            _ => Err("Invalid TCB status"),
+        }
+    }
+}
+
+impl From<QeTcbStatus> for u8 {
+    fn from(value: QeTcbStatus) -> Self {
+        match value {
+            QeTcbStatus::UpToDate => 0,
+            QeTcbStatus::SWHardeningNeeded => 1,
+            QeTcbStatus::OutOfDate => 2,
+            QeTcbStatus::OutOfDateConfigurationNeeded => 3,
+            QeTcbStatus::ConfigurationNeeded => 4,
+            QeTcbStatus::ConfigurationAndSWHardeningNeeded => 5,
+            QeTcbStatus::Revoked => 6,
+            QeTcbStatus::Unspecified => 7,
+        }
+    }
+}
+
 #[allow(clippy::from_over_into)]
 impl Into<TcbStatus> for QeTcbStatus {
     fn into(self) -> TcbStatus {
@@ -207,16 +239,39 @@ impl std::str::FromStr for QeTcbStatus {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
+#[repr(u8)]
 pub enum EnclaveType {
     /// Quoting Enclave
-    Qe,
+    Qe = 0,
     /// Quote Verification Enclave
-    Qve,
+    Qve = 1,
     /// TDX Quoting Enclave
     #[serde(rename = "TD_QE")]
-    TdQe,
+    TdQe = 2,
 }
 
+impl TryFrom<u8> for EnclaveType {
+    type Error = &'static str;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(EnclaveType::Qe),
+            1 => Ok(EnclaveType::Qve),
+            2 => Ok(EnclaveType::TdQe),
+            _ => Err("Invalid enclave type"),
+        }
+    }
+}
+
+impl From<EnclaveType> for u8 {
+    fn from(enclave_type: EnclaveType) -> Self {
+        match enclave_type {
+            EnclaveType::Qe => 0,
+            EnclaveType::Qve => 1,
+            EnclaveType::TdQe => 2,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

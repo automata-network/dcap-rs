@@ -4,6 +4,7 @@ use quote::QuoteBody;
 pub mod collateral;
 #[cfg(feature = "full")]
 pub mod tcb_info;
+#[cfg(feature = "full")]
 pub mod enclave_identity;
 pub mod quote;
 pub mod report;
