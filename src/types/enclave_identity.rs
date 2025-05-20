@@ -175,21 +175,13 @@ pub struct QeTcbLevel {
 #[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
 #[repr(u8)]
 pub enum QeTcbStatus {
-    /// TCB level of the SGX platform is up-to-date.
     UpToDate,
-    /// TCB level of SGX platform requires SW hardening.
     SWHardeningNeeded,
-    /// TCB level of SGX platform is outdated.
-    OutOfDate,
-    /// TCB level of SGX platform is outdated and requires a configuration change.
-    OutOfDateConfigurationNeeded,
-    /// TCB level of SGX platform is outdated and requires a configuration change.
-    ConfigurationNeeded,
-    /// TCB level of SGX platform is outdated and requires a configuration change and SW hardening.
     ConfigurationAndSWHardeningNeeded,
-    /// TCB level of SGX platform is revoked.
+    ConfigurationNeeded,
+    OutOfDate,
+    OutOfDateConfigurationNeeded,
     Revoked,
-    /// Unknown TCB level status.
     Unspecified,
 }
 
@@ -220,7 +212,6 @@ impl TryFrom<u8> for QeTcbStatus {
             4 => Ok(QeTcbStatus::ConfigurationNeeded),
             5 => Ok(QeTcbStatus::ConfigurationAndSWHardeningNeeded),
             6 => Ok(QeTcbStatus::Revoked),
-            7 => Ok(QeTcbStatus::Unspecified),
             _ => Err("Invalid TCB status"),
         }
     }

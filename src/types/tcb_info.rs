@@ -255,14 +255,15 @@ pub struct TcbLevel {
     pub advisory_ids: Option<Vec<String>>,
 }
 
+/// Enum definition as per: https://github.com/automata-network/automata-on-chain-pccs/blob/d93c4881f1b40930bc72be06008d1e1537004d2f/src/helpers/FmspcTcbHelper.sol#L78-L87
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize, Serialize)]
 #[repr(u8)]
 pub enum TcbStatus {
     UpToDate,
-    OutOfDate,
-    ConfigurationNeeded,
     SWHardeningNeeded,
     ConfigurationAndSWHardeningNeeded,
+    ConfigurationNeeded,
+    OutOfDate,
     OutOfDateConfigurationNeeded,
     Revoked,
     Unspecified,
@@ -288,10 +289,10 @@ impl TryFrom<u8> for TcbStatus {
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
         match value {
             0 => Ok(TcbStatus::UpToDate),
-            1 => Ok(TcbStatus::OutOfDate),
-            2 => Ok(TcbStatus::ConfigurationNeeded),
-            3 => Ok(TcbStatus::SWHardeningNeeded),
-            4 => Ok(TcbStatus::ConfigurationAndSWHardeningNeeded),
+            1 => Ok(TcbStatus::SWHardeningNeeded),
+            2 => Ok(TcbStatus::ConfigurationAndSWHardeningNeeded),
+            3 => Ok(TcbStatus::ConfigurationNeeded),
+            4 => Ok(TcbStatus::OutOfDate),
             5 => Ok(TcbStatus::OutOfDateConfigurationNeeded),
             6 => Ok(TcbStatus::Revoked),
             7 => Ok(TcbStatus::Unspecified),
