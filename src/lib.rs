@@ -81,7 +81,7 @@ pub fn verify_dcap_quote(
 
     Ok(VerifiedOutput {
         quote_version: quote.header.version.get(),
-        tee_type: quote.header.tee_type,
+        tee_type: quote.header.tee_type.to_le(), // Compatible with VerifiedOutput defined on-chain
         tcb_status: tcb_status as u8,
         fmspc: pck_extension.fmspc,
         quote_body: quote.body,
