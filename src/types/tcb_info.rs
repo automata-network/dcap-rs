@@ -203,7 +203,7 @@ impl TcbInfo {
     ) -> TcbStatus {
         // Only adjust if TDX module is OutOfDate
         if tdx_module_status != TcbStatus::OutOfDate {
-            return tdx_module_status;
+            return platform_status;
         }
 
         match platform_status {
