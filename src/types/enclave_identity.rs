@@ -1,17 +1,13 @@
-use super::{UInt32LE, tcb_info::TcbStatus};
-use crate::utils::u32_hex;
-use crate::utils::borsh_datetime_as_instant;
-use crate::utils::borsh_uint32le;
 use anyhow::Context;
 use chrono::Utc;
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
-use borsh::{BorshDeserialize, BorshSerialize};
+use super::tcb_info::TcbStatus;
 
-const ENCLAVE_IDENTITY_V2: u16 = 2;
+const ENCLAVE_IDENTITY_V2: u32 = 2;
 
-#[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QeTcb {
     pub isvsvn: u16,
@@ -66,23 +62,23 @@ impl QuotingEnclaveIdentityAndSignature {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, BorshDeserialize, BorshSerialize, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EnclaveIdentity {
     /// Identifier of the SGX Enclave issued by Intel.
     pub id: EnclaveType,
 
     /// Version of the structure.
-    pub version: u16,
+    pub version: u32,
 
     /// The time the Enclave Identity Information was created. The time shalle be in UTC
     /// and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
-    #[borsh(deserialize_with = "borsh_datetime_as_instant::deserialize", serialize_with = "borsh_datetime_as_instant::serialize")]
+   
     pub issue_date: chrono::DateTime<Utc>,
 
     /// The time by which next Enclave Identity information will be issued. The time shall be in UTC
     /// and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
-    #[borsh(deserialize_with = "borsh_datetime_as_instant::deserialize", serialize_with = "borsh_datetime_as_instant::serialize")]
+   
     pub next_update: chrono::DateTime<Utc>,
 
     /// A monotonically increasing sequence number changed when Intel updates the content of the TCB evaluation data set:
@@ -93,26 +89,19 @@ pub struct EnclaveIdentity {
     pub tcb_evaluation_data_number: u16,
 
     /// Base 16-encoded string representing miscselect "golden" value (upon applying mask).
-    #[serde(with = "u32_hex")]
-    #[borsh(deserialize_with = "borsh_uint32le::deserialize", serialize_with = "borsh_uint32le::serialize")]
-    pub miscselect: UInt32LE,
+    pub miscselect: String,
 
     /// Base 16-encoded string representing mask to be applied to miscselect value retrieved from the platform.
-    #[serde(with = "u32_hex")]
-    #[borsh(deserialize_with = "borsh_uint32le::deserialize", serialize_with = "borsh_uint32le::serialize")]
-    pub miscselect_mask: UInt32LE,
+    pub miscselect_mask: String,
 
     /// Base 16-encoded string representing attributes "golden" value (upon applying mask).
-    #[serde(with = "hex")]
-    pub attributes: [u8; 16],
+    pub attributes: String,
 
     /// Base 16-encoded string representing mask to be applied to attributes value retrieved from the platform.
-    #[serde(with = "hex")]
-    pub attributes_mask: [u8; 16],
+    pub attributes_mask: String,
 
     /// Base 16-encoded string representing mrsigner hash.
-    #[serde(with = "hex")]
-    pub mrsigner: [u8; 32],
+    pub mrsigner: String,
 
     /// Enclave Product ID.
     pub isvprodid: u16,
@@ -122,6 +111,41 @@ pub struct EnclaveIdentity {
 }
 
 impl EnclaveIdentity {
+    pub fn miscselect_bytes(&self) -> [u8; 4] {
+        hex::decode(&self.miscselect)
+            .expect("Failed to decode miscselect")
+            .try_into()
+            .expect("miscselect should be 4 bytes")
+    }
+
+    pub fn miscselect_mask_bytes(&self) -> [u8; 4] {
+        hex::decode(&self.miscselect_mask)
+            .expect("Failed to decode miscselect mask")
+            .try_into()
+            .expect("miscselect mask should be 4 bytes")
+    }
+
+    pub fn attributes_bytes(&self) -> [u8; 16] {
+        hex::decode(&self.attributes)
+            .expect("Failed to decode attributes")
+            .try_into()
+            .expect("attributes should be 16 bytes")
+    }
+
+    pub fn attributes_mask_bytes(&self) -> [u8; 16] {
+        hex::decode(&self.attributes_mask)
+            .expect("Failed to decode attributes mask")
+            .try_into()
+            .expect("attributes mask should be 16 bytes")
+    }
+
+    pub fn mrsigner_bytes(&self) -> [u8; 32] {
+        hex::decode(&self.mrsigner)
+            .expect("Failed to decode mrsigner")
+            .try_into()
+            .expect("mrsigner should be 32 bytes")
+    }
+
     pub fn get_qe_tcb_status(&self, isv_svn: u16) -> QeTcbStatus {
         self.tcb_levels
             .iter()
@@ -129,52 +153,35 @@ impl EnclaveIdentity {
             .map(|level| level.tcb_status.clone())
             .unwrap_or(QeTcbStatus::Unspecified)
     }
-
-    pub fn from_borsh_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
-        borsh::from_slice::<EnclaveIdentity>(bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to deserialize enclave identity: {}", e))
-    }
-
-    pub fn to_borsh_bytes(&self) -> anyhow::Result<Vec<u8>> {
-        borsh::to_vec(self)
-            .map_err(|e| anyhow::anyhow!("Failed to serialize enclave identity: {}", e))
-    }
 }
 
 /// Enclave TCB level
-#[derive(Deserialize, Serialize, Debug, BorshDeserialize, BorshSerialize, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct QeTcbLevel {
     /// SGX Enclave's ISV SVN
-    tcb: QeTcb,
+    pub tcb: QeTcb,
     /// The time the TCB was evaluated. The time shall be in UTC and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
-    #[borsh(deserialize_with = "borsh_datetime_as_instant::deserialize", serialize_with = "borsh_datetime_as_instant::serialize")]
-    _tcb_date: chrono::DateTime<Utc>,
+   
+    pub tcb_date: chrono::DateTime<Utc>,
     /// TCB level status
-    tcb_status: QeTcbStatus,
+    pub tcb_status: QeTcbStatus,
     #[serde(rename = "advisoryIDs")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub advisory_ids: Option<Vec<String>>,
 }
 
 /// TCB level status
-#[derive(Deserialize, Serialize, Debug, Clone, BorshDeserialize, BorshSerialize, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
+#[repr(u8)]
 pub enum QeTcbStatus {
-    /// TCB level of the SGX platform is up-to-date.
     UpToDate,
-    /// TCB level of SGX platform requires SW hardening.
     SWHardeningNeeded,
-    /// TCB level of SGX platform is outdated.
-    OutOfDate,
-    /// TCB level of SGX platform is outdated and requires a configuration change.
-    OutOfDateConfigurationNeeded,
-    /// TCB level of SGX platform is outdated and requires a configuration change.
-    ConfigurationNeeded,
-    /// TCB level of SGX platform is outdated and requires a configuration change and SW hardening.
     ConfigurationAndSWHardeningNeeded,
-    /// TCB level of SGX platform is revoked.
+    ConfigurationNeeded,
+    OutOfDate,
+    OutOfDateConfigurationNeeded,
     Revoked,
-    /// Unknown TCB level status.
     Unspecified,
 }
 
@@ -189,6 +196,38 @@ impl std::fmt::Display for QeTcbStatus {
             QeTcbStatus::SWHardeningNeeded => write!(f, "SWHardeningNeeded"),
             QeTcbStatus::OutOfDateConfigurationNeeded => write!(f, "OutOfDateConfigurationNeeded"),
             QeTcbStatus::Unspecified => write!(f, "Unspecified"),
+        }
+    }
+}
+
+impl TryFrom<u8> for QeTcbStatus {
+    type Error = &'static str;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(QeTcbStatus::UpToDate),
+            1 => Ok(QeTcbStatus::SWHardeningNeeded),
+            2 => Ok(QeTcbStatus::OutOfDate),
+            3 => Ok(QeTcbStatus::OutOfDateConfigurationNeeded),
+            4 => Ok(QeTcbStatus::ConfigurationNeeded),
+            5 => Ok(QeTcbStatus::ConfigurationAndSWHardeningNeeded),
+            6 => Ok(QeTcbStatus::Revoked),
+            _ => Err("Invalid TCB status"),
+        }
+    }
+}
+
+impl From<QeTcbStatus> for u8 {
+    fn from(value: QeTcbStatus) -> Self {
+        match value {
+            QeTcbStatus::UpToDate => 0,
+            QeTcbStatus::SWHardeningNeeded => 1,
+            QeTcbStatus::OutOfDate => 2,
+            QeTcbStatus::OutOfDateConfigurationNeeded => 3,
+            QeTcbStatus::ConfigurationNeeded => 4,
+            QeTcbStatus::ConfigurationAndSWHardeningNeeded => 5,
+            QeTcbStatus::Revoked => 6,
+            QeTcbStatus::Unspecified => 7,
         }
     }
 }
@@ -224,74 +263,58 @@ impl std::str::FromStr for QeTcbStatus {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
+#[repr(u8)]
 pub enum EnclaveType {
     /// Quoting Enclave
-    Qe,
+    Qe = 0,
     /// Quote Verification Enclave
-    Qve,
+    Qve = 1,
     /// TDX Quoting Enclave
     #[serde(rename = "TD_QE")]
-    TdQe,
+    TdQe = 2,
 }
 
+impl TryFrom<u8> for EnclaveType {
+    type Error = &'static str;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(EnclaveType::Qe),
+            1 => Ok(EnclaveType::Qve),
+            2 => Ok(EnclaveType::TdQe),
+            _ => Err("Invalid enclave type"),
+        }
+    }
+}
+
+impl From<EnclaveType> for u8 {
+    fn from(enclave_type: EnclaveType) -> Self {
+        match enclave_type {
+            EnclaveType::Qe => 0,
+            EnclaveType::Qve => 1,
+            EnclaveType::TdQe => 2,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::{Digest, Sha256};
 
     #[test]
     fn test_enclave_identity_serialization() {
         let qe_identity = include_bytes!("../../data/qeidentityv2_apiv4.json");
         let qe_identity: QuotingEnclaveIdentityAndSignature = serde_json::from_slice(qe_identity).unwrap();
-        let original_qe_identity = qe_identity.get_enclave_identity().unwrap();
+        let qe_identity_parsed = qe_identity.get_enclave_identity().unwrap();
 
-        let enclave_identity_bytes = borsh::to_vec(&original_qe_identity).unwrap();
-        let deserialized_qe_identity = EnclaveIdentity::try_from_slice(&enclave_identity_bytes).unwrap();
+        let original_qe_identity_hash = Sha256::digest(qe_identity.enclave_identity_raw.get().as_bytes());
 
-        // Verify that the deserialized enclave identity matches the original
-        assert_eq!(original_qe_identity.id, deserialized_qe_identity.id);
-        assert_eq!(original_qe_identity.version, deserialized_qe_identity.version);
-        assert_eq!(original_qe_identity.issue_date, deserialized_qe_identity.issue_date);
-        assert_eq!(original_qe_identity.next_update, deserialized_qe_identity.next_update);
-        assert_eq!(original_qe_identity.miscselect, deserialized_qe_identity.miscselect);
-        assert_eq!(original_qe_identity.miscselect_mask, deserialized_qe_identity.miscselect_mask);
-        assert_eq!(original_qe_identity.attributes, deserialized_qe_identity.attributes);
-        assert_eq!(original_qe_identity.attributes_mask, deserialized_qe_identity.attributes_mask);
-        assert_eq!(original_qe_identity.mrsigner, deserialized_qe_identity.mrsigner);
-        assert_eq!(original_qe_identity.isvprodid, deserialized_qe_identity.isvprodid);
-        assert_eq!(original_qe_identity.tcb_levels.len(), deserialized_qe_identity.tcb_levels.len());
+        let serialized_qe_identity = serde_json::to_string(&qe_identity_parsed).unwrap();
+        let serialized_qe_identity_hash = Sha256::digest(serialized_qe_identity.as_bytes());
 
-        // Detailed verification of each tcb_level
-        for (i, original_tcb_level) in original_qe_identity.tcb_levels.iter().enumerate() {
-            let deserialized_tcb_level = &deserialized_qe_identity.tcb_levels[i];
-
-            // Verify TCB values
-            assert_eq!(original_tcb_level.tcb.isvsvn, deserialized_tcb_level.tcb.isvsvn);
-
-            // Verify TCB date
-            assert_eq!(original_tcb_level._tcb_date, deserialized_tcb_level._tcb_date);
-
-            // Verify TCB status
-            assert!(matches!(
-                &original_tcb_level.tcb_status,
-                status if std::mem::discriminant(status) == std::mem::discriminant(&deserialized_tcb_level.tcb_status)
-            ));
-
-            // Verify advisory IDs
-            match (&original_tcb_level.advisory_ids, &deserialized_tcb_level.advisory_ids) {
-                (Some(original_ids), Some(deserialized_ids)) => {
-                    assert_eq!(original_ids.len(), deserialized_ids.len());
-                    for (j, original_id) in original_ids.iter().enumerate() {
-                        assert_eq!(original_id, &deserialized_ids[j]);
-                    }
-                },
-                (None, None) => {},
-                _ => panic!("Advisory IDs mismatch in TCB level {}", i),
-            }
-        }
+        assert_eq!(original_qe_identity_hash, serialized_qe_identity_hash);
     }
-
-
 }

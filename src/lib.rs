@@ -2,12 +2,17 @@ pub mod trust_store;
 pub mod types;
 pub mod utils;
 
-use std::time::SystemTime;
-
+#[cfg(feature = "full")]
 use anyhow::{Context, anyhow, bail};
+#[cfg(feature = "full")]
 use chrono::{DateTime, Utc};
+#[cfg(feature = "full")]
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
+#[cfg(feature = "full")]
+use std::time::SystemTime;
+#[cfg(feature = "full")]
 use trust_store::{TrustStore, TrustedIdentity};
+#[cfg(feature = "full")]
 use types::{
     VerifiedOutput,
     collateral::Collateral,
@@ -16,9 +21,13 @@ use types::{
     sgx_x509::SgxPckExtension,
     tcb_info::{TcbInfo, TcbStatus},
 };
+#[cfg(feature = "full")]
 use utils::Expireable;
+#[cfg(feature = "full")]
 use x509_cert::der::{Any, DecodePem};
+#[cfg(feature = "full")]
 use x509_verify::VerifyingKey as X509VerifyingKey;
+#[cfg(feature = "full")]
 use zerocopy::AsBytes;
 
 pub const INTEL_ROOT_CA_PEM: &str = "\
@@ -27,6 +36,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEC6nEwMDIYZOj/iPWsCzaEKi71OiO
 SLRFhWGjbnBVJfVnkY4u3IjkDYYL0MxO4mqsyYjlBalTVYxFP2sJBK5zlA==
 -----END PUBLIC KEY-----";
 
+#[cfg(feature = "full")]
 pub fn verify_dcap_quote(
     current_time: SystemTime,
     collateral: Collateral,
@@ -41,7 +51,8 @@ pub fn verify_dcap_quote(
 
     // 3. Verify the status of Intel SGX TCB described in the chain.
     let pck_extension = quote.signature.get_pck_extension()?;
-    let (sgx_tcb_status, tdx_tcb_status, advisory_ids) = verify_tcb_status(&tcb_info, &pck_extension, &quote)?;
+    let (sgx_tcb_status, tdx_tcb_status, advisory_ids) =
+        verify_tcb_status(&tcb_info, &pck_extension, &quote)?;
 
     assert!(
         sgx_tcb_status != TcbStatus::Revoked || tdx_tcb_status != TcbStatus::Revoked,
@@ -70,16 +81,15 @@ pub fn verify_dcap_quote(
 
     Ok(VerifiedOutput {
         quote_version: quote.header.version.get(),
-        tee_type: quote.header.tee_type,
-        tcb_status,
+        tee_type: quote.header.tee_type.to_le(), // Compatible with VerifiedOutput defined on-chain
+        tcb_status: tcb_status as u8,
         fmspc: pck_extension.fmspc,
         quote_body: quote.body,
         advisory_ids,
     })
 }
 
-
-
+#[cfg(feature = "full")]
 fn verify_integrity(
     current_time: SystemTime,
     collateral: &Collateral,
@@ -181,6 +191,7 @@ fn verify_integrity(
     Ok(tcb_info)
 }
 
+#[cfg(feature = "full")]
 fn verify_quote(
     current_time: SystemTime,
     collateral: &Collateral,
@@ -193,12 +204,12 @@ fn verify_quote(
 
 /// Verify the quote enclave source and return the TCB status
 /// of the quoting enclave.
+#[cfg(feature = "full")]
 pub fn verify_quote_enclave_source(
     current_time: SystemTime,
     collateral: &Collateral,
     quote: &Quote,
 ) -> anyhow::Result<QeTcbStatus> {
-
     // Verify that the enclave identity root is signed by root certificate
     let qe_identity = collateral
         .qe_identity
@@ -222,10 +233,11 @@ pub fn verify_quote_enclave_source(
     }
 
     // Compare the mr_signer values
-    if qe_identity.mrsigner != quote.signature.qe_report_body.mr_signer {
+    let qe_identity_mr_signer_bytes: [u8; 32] = qe_identity.mrsigner_bytes();
+    if qe_identity_mr_signer_bytes != quote.signature.qe_report_body.mr_signer {
         bail!(
             "invalid qe mrsigner, expected {} but got {}",
-            hex::encode(qe_identity.mrsigner),
+            qe_identity.mrsigner.as_str(),
             hex::encode(quote.signature.qe_report_body.mr_signer)
         );
     }
@@ -241,14 +253,14 @@ pub fn verify_quote_enclave_source(
 
     // Compare the attribute values
     let qe_report_attributes = quote.signature.qe_report_body.sgx_attributes;
-    let calculated_mask = qe_identity
-        .attributes_mask
+    let qe_identity_attributes_bytes: [u8; 16] = qe_identity.attributes_bytes();
+    let calculated_mask = qe_identity_attributes_bytes
         .iter()
         .zip(qe_report_attributes.iter())
         .map(|(&mask, &attribute)| mask & attribute);
 
     if calculated_mask
-        .zip(qe_identity.attributes)
+        .zip(qe_identity_attributes_bytes)
         .any(|(masked, identity)| masked != identity)
     {
         bail!("qe attrtibutes mismatch");
@@ -256,15 +268,14 @@ pub fn verify_quote_enclave_source(
 
     // Compare misc_select values
     let misc_select = quote.signature.qe_report_body.misc_select;
-    let calculated_mask = qe_identity
-        .miscselect_mask
-        .as_bytes()
+    let qe_identity_misc_select_bytes: [u8; 4] = qe_identity.miscselect_bytes();
+    let calculated_mask = qe_identity_misc_select_bytes
         .iter()
         .zip(misc_select.as_bytes().iter())
         .map(|(&mask, &attribute)| mask & attribute);
 
     if calculated_mask
-        .zip(qe_identity.miscselect.as_bytes().iter())
+        .zip(qe_identity_misc_select_bytes.iter())
         .any(|(masked, &identity)| masked != identity)
     {
         bail!("qe misc_select mismatch");
@@ -276,6 +287,7 @@ pub fn verify_quote_enclave_source(
 }
 
 /// Verify the quote signatures.
+#[cfg(feature = "full")]
 pub fn verify_quote_signatures(quote: &Quote) -> anyhow::Result<()> {
     let pck_cert_chain_data = quote.signature.get_pck_cert_chain()?;
     let pck_pk_bytes = pck_cert_chain_data.pck_cert_chain[0]
@@ -325,13 +337,19 @@ pub fn verify_quote_signatures(quote: &Quote) -> anyhow::Result<()> {
 
 /// Ensure the latest tcb info is not revoked, and is either up to date or only needs a configuration
 /// change.
+#[cfg(feature = "full")]
 pub fn verify_tcb_status(
     tcb_info: &TcbInfo,
     pck_extension: &SgxPckExtension,
     quote: &Quote,
 ) -> anyhow::Result<(TcbStatus, TcbStatus, Vec<String>)> {
     // Make sure the tcb_info matches the enclave's model/PCE version
-    if pck_extension.fmspc != tcb_info.fmspc {
+
+    let tcb_info_fmspc_bytes: [u8; 6] = tcb_info.fmspc_bytes();
+
+    let tcb_info_pce_id_bytes: [u8; 2] = tcb_info.pce_id_bytes();
+
+    if pck_extension.fmspc != tcb_info_fmspc_bytes {
         return Err(anyhow::anyhow!(
             "tcb fmspc mismatch (pck extension: {:?}, tcb_info: {:?})",
             pck_extension.fmspc,
@@ -339,7 +357,7 @@ pub fn verify_tcb_status(
         ));
     }
 
-    if pck_extension.pceid != tcb_info.pce_id {
+    if pck_extension.pceid != tcb_info_pce_id_bytes {
         return Err(anyhow::anyhow!(
             "tcb pceid mismatch (pck extension: {:?}, tcb_info: {:?})",
             pck_extension.pceid,
@@ -350,18 +368,16 @@ pub fn verify_tcb_status(
     TcbStatus::lookup(pck_extension, tcb_info, quote)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "zero-copy")))]
 mod tests {
 
     use std::time::Duration;
 
     use x509_cert::{crl::CertificateList, der::Decode};
 
+    use crate::types::tcb_info::TcbInfoAndSignature;
     use crate::{
-        types::{
-            enclave_identity::QuotingEnclaveIdentityAndSignature, tcb_info::TcbInfoAndSignature,
-        },
-        utils::cert_chain_processor,
+        types::enclave_identity::QuotingEnclaveIdentityAndSignature, utils::cert_chain_processor,
     };
 
     use super::*;
