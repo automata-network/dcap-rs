@@ -7,6 +7,8 @@ use p256::ecdsa::signature::Verifier;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
+use crate::types::{quote::TDX_TEE_TYPE, report::Td10ReportBody};
+
 use super::{
     quote::{Quote, QuoteBody},
     sgx_x509::SgxPckExtension,
@@ -456,7 +458,7 @@ impl TcbStatus {
             .tcb_levels
             .iter()
             .enumerate()
-            .find(|(_, level)| TcbStatus::pck_in_tcb_level(level, pck_extension))
+            .find(|(_, level)| pck_in_tcb_level(level, pck_extension))
             .ok_or_else(|| anyhow::anyhow!("unsupported TCB in pck extension"))?;
 
         // Extract the SGX TCB status and advisories from the matching level
@@ -470,45 +472,65 @@ impl TcbStatus {
         // Will be updated if a valid TDX module is found in the quote
         let mut tdx_tcb_status = TcbStatus::Unspecified;
 
-        // Check if the quote contains a TDX module (TD 1.0 Quote Body)
-        if let QuoteBody::Td10QuoteBody(body) = &quote.body {
-            // Start iterating from the found sgx matching level
-            for level in &tcb_info.tcb_levels[index..] {
-                // Process each level starting from the matching one
-                if let Some(tdx_tcb_components) = level.tcb.tdx_tcb_components() {
-                    let components_match = tdx_tcb_components
-                        .iter()
-                        .zip(body.tee_tcb_svn.iter())
-                        .all(|(&comp, &svn)| comp <= svn);
+        if quote.header.tee_type == TDX_TEE_TYPE {
+            let td_report = match &quote.body {
+                QuoteBody::Td10QuoteBody(report) => report,
+                QuoteBody::Td15QuoteBody(report) => &report.td_report,
+                _ => bail!("TDX Quote should only contain Td10 or Td15 report"),
+            };
 
-                    if components_match {
-                        tdx_tcb_status = level.tcb_status;
-                        advisory_ids = level.advisory_ids.clone().unwrap_or_default();
-                        break;
-                    }
-                } else {
-                    // This should not happen, meaning if you have a Td10QuoteBody, you should have a TDX TCB Component present in the TCB Info
-                    return Err(anyhow::anyhow!(
-                        "did not find tdx tcb components in tcb info when Td10QuoteBody is provided for the quote"
-                    ));
-                }
-            }
+            let matched_tcb_level = match_tdx_tcb(td_report, tcb_info, index)?;
+            tdx_tcb_status = matched_tcb_level.tcb_status;
+            advisory_ids = matched_tcb_level.advisory_ids.clone().unwrap_or_default();
         }
 
         // Return the final status determination as a tuple
         Ok((sgx_tcb_status, tdx_tcb_status, advisory_ids))
     }
+}
 
-    /// Returns true if all the pck componenets are >= all the tcb level components and e
-    /// the pck pcesvn is >= the tcb level pcesvn.
-    fn pck_in_tcb_level(level: &TcbLevel, pck_extension: &SgxPckExtension) -> bool {
-        const SVN_LENGTH: usize = 16;
-        let pck_components: &[u8; SVN_LENGTH] = &pck_extension.tcb.compsvn;
+/// Returns true if all the pck componenets are >= all the tcb level components and
+/// the pck pcesvn is >= the tcb level pcesvn.
+fn pck_in_tcb_level(level: &TcbLevel, pck_extension: &SgxPckExtension) -> bool {
+    const SVN_LENGTH: usize = 16;
+    let pck_components: &[u8; SVN_LENGTH] = &pck_extension.tcb.compsvn;
 
-        pck_components
-            .iter()
-            .zip(level.tcb.sgx_tcb_components())
-            .all(|(&pck, tcb)| pck >= tcb)
-            && pck_extension.tcb.pcesvn >= level.tcb.pcesvn()
+    pck_components
+        .iter()
+        .zip(level.tcb.sgx_tcb_components())
+        .all(|(&pck, tcb)| pck >= tcb)
+        && pck_extension.tcb.pcesvn >= level.tcb.pcesvn()
+}
+
+fn match_tdx_tcb(
+    td_report: &Td10ReportBody,
+    tcb_info: &TcbInfo,
+    index: usize,
+) -> anyhow::Result<TcbLevel> {
+    let matching_level: TcbLevel;
+
+    // Start iterating from the found sgx matching level
+    for level in &tcb_info.tcb_levels[index..] {
+        // Process each level starting from the matching one
+        if let Some(tdx_tcb_components) = level.tcb.tdx_tcb_components() {
+            let components_match = tdx_tcb_components
+                .iter()
+                .zip(td_report.tee_tcb_svn.iter())
+                .all(|(&comp, &svn)| comp <= svn);
+
+            if components_match {
+                // tdx_tcb_status = level.tcb_status;
+                // advisory_ids = level.advisory_ids.clone().unwrap_or_default();
+                matching_level = level.clone();
+                return Ok(matching_level);
+            }
+        } else {
+            // This should not happen, meaning if you have a Td10QuoteBody, you should have a TDX TCB Component present in the TCB Info
+            break;
+        }
     }
+
+    Err(anyhow::anyhow!(
+        "can not find tdx tcb components in tcb info for TDX Quote Body"
+    ))
 }
