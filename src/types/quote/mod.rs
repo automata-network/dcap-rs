@@ -19,13 +19,10 @@ pub const TDX_TEE_TYPE: u32 = 0x00000081;
 /// A DCAP quote, used for verification.
 #[derive(Debug)]
 pub struct Quote<'a> {
-    /// Header of the SGX Quote data structure.
     pub header: QuoteHeader,
-
-    /// Software Vendor enclave report.
+    pub body_type: u16,
+    pub body_size: u32,
     pub body: QuoteBody,
-
-    /// Signature of the quote body.
     pub signature: QuoteSignatureData<'a>,
 }
 
@@ -40,12 +37,18 @@ impl<'a> Quote<'a> {
             .ok_or_else(|| anyhow!("underflow reading quote header"))?;
 
         // Read the quote body and signature
+        let quote_body_type;
+        let quote_body_size;
         let quote_body = if quote_header.version.get() <= 4 {
             if quote_header.tee_type == SGX_TEE_TYPE {
+                quote_body_type = 1;
+                quote_body_size = std::mem::size_of::<EnclaveReportBody>() as u32;
                 let isv_report_body = utils::read_from_bytes::<EnclaveReportBody>(bytes)
                     .ok_or_else(|| anyhow!("underflow reading enclave report body"))?;
                 QuoteBody::SgxQuoteBody(isv_report_body)
             } else if quote_header.tee_type == TDX_TEE_TYPE {
+                quote_body_type = 2;
+                quote_body_size = std::mem::size_of::<Td10ReportBody>() as u32;
                 let td_report = utils::read_from_bytes::<Td10ReportBody>(bytes)
                     .ok_or_else(|| anyhow!("underflow reading td10 report body"))?;
                 QuoteBody::Td10QuoteBody(td_report)
@@ -53,10 +56,10 @@ impl<'a> Quote<'a> {
                 return Err(anyhow!("unsupported TEE type"));
             }
         } else {
-            let quote_body_type = u16::from_le_bytes([bytes[0], bytes[1]]);
+            quote_body_type = u16::from_le_bytes([bytes[0], bytes[1]]);
             *bytes = &bytes[2..];
 
-            let quote_body_size = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            quote_body_size = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
             *bytes = &bytes[4..];
 
             if quote_body_type == 1 {
@@ -99,6 +102,8 @@ impl<'a> Quote<'a> {
 
         Ok(Quote {
             header: quote_header,
+            body_type: quote_body_type,
+            body_size: quote_body_size,
             body: quote_body,
             signature: quote_signature,
         })

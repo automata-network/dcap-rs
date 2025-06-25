@@ -352,6 +352,11 @@ pub fn verify_quote_signatures(quote: &Quote) -> anyhow::Result<()> {
     let body_bytes = quote.body.as_bytes();
     let mut data = Vec::with_capacity(header_bytes.len() + body_bytes.len());
     data.extend_from_slice(header_bytes);
+    if quote.header.version.get() > 4 {
+        // For version 5 and above, we include the quote body type and size
+        data.extend_from_slice(&quote.body_type.to_le_bytes());
+        data.extend_from_slice(&quote.body_size.to_le_bytes());
+    }
     data.extend_from_slice(body_bytes);
 
     let sig = Signature::from_slice(quote.signature.isv_signature)?;
