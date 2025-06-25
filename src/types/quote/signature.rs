@@ -46,10 +46,12 @@ impl<'a> QuoteSignatureData<'a> {
             return Err(anyhow!("underflow reading signature"));
         }
 
-        match version {
-            3 => Self::read_v3_signature(bytes),
-            4 => Self::read_v4_signature(bytes),
-            _ => Err(anyhow!("unsupported quote version")),
+        if version == 3 {
+            Self::read_v3_signature(bytes)
+        } else if version >= 4 {
+            Self::read_v4_signature(bytes)
+        } else {
+            Err(anyhow!("unsupported quote version"))
         }
     }
 

@@ -4,8 +4,6 @@ use zerocopy::little_endian;
 const SGX_CPUSVN_SIZE: usize = 16;
 const SGX_HASH_SIZE: usize = 32;
 
-/// EnclaveReportBody is the body of the SGX report.
-///
 #[derive(Debug, zerocopy::FromBytes, zerocopy::FromZeroes, zerocopy::AsBytes)]
 #[repr(C)]
 pub struct EnclaveReportBody {
@@ -88,7 +86,6 @@ impl TryFrom<[u8; std::mem::size_of::<EnclaveReportBody>()]> for EnclaveReportBo
     }
 }
 
-/// Td10ReportBody is the body of the TDX 1.0 Quotes
 #[derive(Debug, zerocopy::FromBytes, zerocopy::FromZeroes, zerocopy::AsBytes)]
 #[repr(C)]
 pub struct Td10ReportBody {
@@ -161,6 +158,31 @@ impl TryFrom<[u8; std::mem::size_of::<Td10ReportBody>()]> for Td10ReportBody {
     type Error = anyhow::Error;
 
     fn try_from(value: [u8; std::mem::size_of::<Td10ReportBody>()]) -> Result<Self, Self::Error> {
+        let report = <Self as zerocopy::FromBytes>::read_from(&value)
+            .expect("failed to read tdx report body");
+
+        Ok(report)
+    }
+}
+
+#[derive(Debug, zerocopy::FromBytes, zerocopy::FromZeroes, zerocopy::AsBytes)]
+#[repr(C)]
+pub struct Td15ReportBody {
+    pub td_report: Td10ReportBody,
+
+    /// (584) Describes the current TCB of TDX. This value may will be different than TEE_TCB_SVN by
+    /// loading a new version of the TDX Module using the TD Preserving update capability)
+    pub tee_tcb_svn2: [u8; 16],
+
+    /// (600) Measurement of the initial contents of the Migration TD
+    pub mr_service_td: [u8; 48]
+    // Total 648 bytes
+}
+
+impl TryFrom<[u8; std::mem::size_of::<Td15ReportBody>()]> for Td15ReportBody {
+    type Error = anyhow::Error;
+
+    fn try_from(value: [u8; std::mem::size_of::<Td15ReportBody>()]) -> Result<Self, Self::Error> {
         let report = <Self as zerocopy::FromBytes>::read_from(&value)
             .expect("failed to read tdx report body");
 

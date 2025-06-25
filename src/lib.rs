@@ -435,7 +435,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_tdx_quote() {
+    fn parse_tdx_v5_quote() {
+        let bytes = include_bytes!("../data/v5/alibaba_quote_5.dat");
+        let quote = Quote::read(&mut bytes.as_slice()).unwrap();
+        println!("{:?}", quote);
+    }
+
+    #[test]
+    fn parse_tdx_v4_quote() {
         let bytes = include_bytes!("../data/quote_tdx.bin");
         let quote = Quote::read(&mut bytes.as_slice()).unwrap();
         println!("{:?}", quote);

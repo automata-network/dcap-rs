@@ -17,7 +17,7 @@ pub type UInt64LE = zerocopy::little_endian::U64;
 
 // serialization:
 // [quote_vesion][tee_type][tcb_status][fmspc][quote_body_raw_bytes][abi-encoded string array of tcb_advisory_ids]
-// 2 bytes + 4 bytes + 1 byte + 6 bytes + var (SGX_ENCLAVE_REPORT = 384; TD10_REPORT = 584) + var
+// 2 bytes + 4 bytes + 1 byte + 6 bytes + var (SGX_ENCLAVE_REPORT = 384;  = 584) + var
 // total: 13 + (384 or 584) + var bytes
 #[derive(Debug)]
 pub struct VerifiedOutput {
