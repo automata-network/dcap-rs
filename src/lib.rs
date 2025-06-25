@@ -1,3 +1,4 @@
+pub mod tdx;
 pub mod trust_store;
 pub mod types;
 pub mod utils;
@@ -10,6 +11,8 @@ use chrono::{DateTime, Utc};
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 #[cfg(feature = "full")]
 use std::time::SystemTime;
+#[cfg(feature = "full")]
+use tdx::*;
 #[cfg(feature = "full")]
 use trust_store::{TrustStore, TrustedIdentity};
 #[cfg(feature = "full")]
@@ -44,10 +47,16 @@ pub fn verify_dcap_quote(
 ) -> anyhow::Result<VerifiedOutput> {
     // 1. Verify the integrity of the signature chain from the Quote to the Intel-issued PCK
     //    certificate, and that no keys in the chain have been revoked.
+    use crate::types::quote::QuoteBody;
     let tcb_info = verify_integrity(current_time, &collateral, &quote)?;
 
     // 2. Verify the Quoting Enclave source and all signatures in the Quote.
     let qe_tcb_status = verify_quote(current_time, &collateral, &quote)?;
+
+    assert!(
+        qe_tcb_status != QeTcbStatus::Revoked,
+        "Quoting Enclave TCB Revoked"
+    );
 
     // 3. Verify the status of Intel SGX TCB described in the chain.
     let pck_extension = quote.signature.get_pck_extension()?;
@@ -70,7 +79,7 @@ pub fn verify_dcap_quote(
     if quote.header.tee_type == TDX_TEE_TYPE {
         tcb_status = tdx_tcb_status;
         let tdx_module_status =
-            tcb_info.verify_tdx_module(quote.body.as_tdx_report_body().unwrap())?;
+            verify_tdx_module(&tcb_info, quote.body.as_tdx_report_body().unwrap())?;
         tcb_status = TcbInfo::converge_tcb_status_with_tdx_module(tcb_status, tdx_module_status);
     } else {
         tcb_status = sgx_tcb_status;
@@ -78,6 +87,24 @@ pub fn verify_dcap_quote(
 
     // 5. Converge platform TCB status with QE TCB status
     tcb_status = TcbInfo::converge_tcb_status_with_qe_tcb(tcb_status, qe_tcb_status.into());
+
+    // 6. Perform Relaunch Check if the quote contains a TD 1.5 Report
+    if let QuoteBody::Td15QuoteBody(td_report) = &quote.body {
+        let (relaunch_needed, configuration_needed) = check_for_relaunch(
+            &tcb_info,
+            td_report,
+            qe_tcb_status,
+            sgx_tcb_status,
+            tdx_tcb_status,
+        );
+        if relaunch_needed {
+            if configuration_needed {
+                tcb_status = TcbStatus::RelaunchAdvisedConfigurationNeeded;
+            } else {
+                tcb_status = TcbStatus::RelaunchAdvised;
+            }
+        }
+    }
 
     Ok(VerifiedOutput {
         quote_version: quote.header.version.get(),

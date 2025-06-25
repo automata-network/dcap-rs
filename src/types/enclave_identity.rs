@@ -172,7 +172,7 @@ pub struct QeTcbLevel {
 }
 
 /// TCB level status
-#[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, Eq, PartialEq)]
 #[repr(u8)]
 pub enum QeTcbStatus {
     UpToDate,
