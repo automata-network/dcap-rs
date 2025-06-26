@@ -1,6 +1,11 @@
+#[cfg(feature = "zero-copy")]
+use crate::utils::cert_chain_processor;
 use crate::utils::{cert_chain, crl};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use x509_cert::{Certificate, crl::CertificateList};
+#[cfg(not(feature = "zero-copy"))]
+use x509_cert::certificate::CertificateInner;
+use x509_cert::{Certificate, crl::CertificateList, der::Decode};
 
 use super::{enclave_identity::QuotingEnclaveIdentityAndSignature, tcb_info::TcbInfoAndSignature};
 
@@ -38,12 +43,60 @@ pub struct Collateral {
     pub qe_identity: QuotingEnclaveIdentityAndSignature,
 }
 
+impl Collateral {
+    pub fn new(
+        root_ca_crl_der: &[u8],
+        pck_crl_der: &[u8],
+        tcb_info_and_qe_identity_issuer_chain_pem_bytes: &[u8],
+        tcb_info_json_str: &str,
+        qe_identity_json_str: &str,
+    ) -> Result<Self> {
+        let root_ca_crl = CertificateList::from_der(root_ca_crl_der)?;
+        let pck_crl = CertificateList::from_der(pck_crl_der)?;
+        #[cfg(not(feature = "zero-copy"))]
+        let tcb_info_and_qe_identity_issuer_chain: Vec<Certificate> =
+            CertificateInner::load_pem_chain(tcb_info_and_qe_identity_issuer_chain_pem_bytes)?;
+        #[cfg(feature = "zero-copy")]
+        let tcb_info_and_qe_identity_issuer_chain: Vec<Certificate> =
+            cert_chain_processor::load_pem_chain_bpf_friendly(
+                tcb_info_and_qe_identity_issuer_chain_pem_bytes,
+            )?;
+        let tcb_info: TcbInfoAndSignature = serde_json::from_str(tcb_info_json_str)?;
+        let qe_identity: QuotingEnclaveIdentityAndSignature =
+            serde_json::from_str(qe_identity_json_str)?;
+
+        Ok(Self {
+            root_ca_crl,
+            pck_crl,
+            tcb_info_and_qe_identity_issuer_chain,
+            tcb_info,
+            qe_identity,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Collateral;
 
     #[test]
-    fn encode_decode_collateral_json() {
+    fn test_encode_collateral() {
+        let collateral = Collateral::new(
+            include_bytes!("../../data/intel_root_ca_crl.der"),
+            include_bytes!("../../data/pck_platform_crl.der"),
+            include_bytes!("../../data/tcb_signing_cert.pem"),
+            include_str!("../../data/tcb_info_v2.json"),
+            include_str!("../../data/qeidentityv2.json"),
+        )
+        .expect("collateral to be created");
+
+        let json = serde_json::to_string(&collateral).expect("collateral to serialize");
+        assert!(!json.is_empty(), "collateral JSON should not be empty");
+        println!("Collateral JSON: {}", json);
+    }
+
+    #[test]
+    fn test_decode_collateral_json() {
         let json = include_str!("../../data/full_collateral_sgx.json");
         let _collateral: Collateral = serde_json::from_str(json).expect("json to parse");
     }

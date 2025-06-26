@@ -426,7 +426,7 @@ mod tests {
         let quote = include_bytes!("../data/quote_tdx.bin");
         let quote = Quote::read(&mut quote.as_slice()).unwrap();
 
-        let tcb_info_and_qe_identity_issuer_chain = include_bytes!("../data/v5/signing_cert.pem");
+        let tcb_info_and_qe_identity_issuer_chain = include_bytes!("../data/signing_cert.pem");
         let tcb_info_and_qe_identity_issuer_chain =
             cert_chain_processor::load_pem_chain_bpf_friendly(
                 tcb_info_and_qe_identity_issuer_chain,
@@ -460,33 +460,14 @@ mod tests {
         let quote = include_bytes!("../data/v5/alibaba_quote_5.dat");
         let quote = Quote::read(&mut quote.as_slice()).unwrap();
 
-        let tcb_info_and_qe_identity_issuer_chain = include_bytes!("../data/v5/signing_cert.pem");
-        let tcb_info_and_qe_identity_issuer_chain =
-            cert_chain_processor::load_pem_chain_bpf_friendly(
-                tcb_info_and_qe_identity_issuer_chain,
-            )
-            .unwrap();
+        let collateral = Collateral::new(
+            include_bytes!("../data/intel_root_ca_crl.der"),
+            include_bytes!("../data/pck_platform_crl.der"),
+            include_bytes!("../data/v5/signing_cert.pem"),
+            include_str!("../data/v5/tcbinfov3_90C06F000000.json"),
+            include_str!("../data/v5/qe_td.json"),
+        ).expect("Failed to load collaterals");
 
-        let root_ca_crl = include_bytes!("../data/intel_root_ca_crl.der");
-        let root_ca_crl = CertificateList::from_der(root_ca_crl).unwrap();
-
-        let tcb_info = include_bytes!("../data/v5/tcbinfov3_90C06F000000.json");
-        let tcb_info: TcbInfoAndSignature = serde_json::from_slice(tcb_info).unwrap();
-
-        let qe_identity = include_bytes!("../data/v5/qe_td.json");
-        let qe_identity: QuotingEnclaveIdentityAndSignature =
-            serde_json::from_slice(qe_identity).unwrap();
-
-        let platform_ca_crl = include_bytes!("../data/pck_platform_crl.der");
-        let platform_ca_crl = CertificateList::from_der(platform_ca_crl).unwrap();
-
-        let collateral = Collateral {
-            tcb_info_and_qe_identity_issuer_chain,
-            root_ca_crl,
-            pck_crl: platform_ca_crl,
-            tcb_info,
-            qe_identity,
-        };
         (collateral, quote)
     }
 
