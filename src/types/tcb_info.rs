@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
 use crate::types::{quote::TDX_TEE_TYPE, report::Td10ReportBody};
+use crate::utils::keccak;
 
 use super::{
     quote::{Quote, QuoteBody},
@@ -184,6 +185,39 @@ impl TcbInfo {
             // All other statuses remain unchanged
             _ => platform_status,
         }
+    }
+
+    pub fn get_content_hash(&self) -> [u8; 32] {
+        let id: u8 = match &self.id {
+            Some(id) => {
+                if id == "SGX" {
+                    0
+                } else if id == "TDX" {
+                    1
+                } else {
+                    panic!("Unsupported TCB Info ID: {}", id);
+                }
+            },
+            None => 0,
+        };
+
+        let mut pre_image: Vec<u8> = vec![];
+        pre_image.extend_from_slice(&[self.tcb_type]);
+        pre_image.extend_from_slice(&[id]);
+        pre_image.extend_from_slice(&u32::from(self.version).to_be_bytes());
+        pre_image.extend_from_slice(&self.fmspc_bytes());
+        pre_image.extend_from_slice(&self.pce_id_bytes());
+        pre_image.extend_from_slice(serde_json::to_vec(&self.tcb_levels).unwrap().as_slice());
+
+        if let Some(tdx_module) = &self.tdx_module {
+            pre_image.extend_from_slice(&serde_json::to_vec(tdx_module).unwrap());
+        }
+
+        if let Some(tdx_module_identities) = &self.tdx_module_identities {
+            pre_image.extend_from_slice(&serde_json::to_vec(tdx_module_identities).unwrap());
+        }
+
+        keccak::hash(&pre_image)
     }
 }
 

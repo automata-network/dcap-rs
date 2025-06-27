@@ -2,6 +2,18 @@ use std::time::SystemTime;
 
 use x509_cert::{certificate::CertificateInner, crl::CertificateList};
 
+pub mod keccak {
+    use tiny_keccak::{Hasher, Keccak};
+
+    pub fn hash(data: &[u8]) -> [u8; 32] {
+        let mut hasher = Keccak::v256();
+        let mut output = [0u8; 32];
+        hasher.update(data);
+        hasher.finalize(&mut output);
+        output
+    }
+}
+
 /// A module for serializing and deserializing certificate chains.
 pub mod cert_chain {
     use serde::{Deserialize, de, ser};
