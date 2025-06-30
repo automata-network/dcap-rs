@@ -1,15 +1,16 @@
+use alloy_sol_types::SolValue;
 use quote::QuoteBody;
 
 #[cfg(feature = "full")]
 pub mod collateral;
 #[cfg(feature = "full")]
-pub mod tcb_info;
-#[cfg(feature = "full")]
 pub mod enclave_identity;
+pub mod pod;
 pub mod quote;
 pub mod report;
 pub mod sgx_x509;
-pub mod pod;
+#[cfg(feature = "full")]
+pub mod tcb_info;
 
 pub type UInt16LE = zerocopy::little_endian::U16;
 pub type UInt32LE = zerocopy::little_endian::U32;
@@ -27,4 +28,22 @@ pub struct VerifiedOutput {
     pub fmspc: [u8; 6],
     pub quote_body: QuoteBody,
     pub advisory_ids: Option<Vec<String>>,
+}
+
+impl VerifiedOutput {
+    pub fn to_vec(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.quote_version.to_be_bytes());
+        bytes.extend_from_slice(&self.tee_type.to_le_bytes());
+        bytes.push(self.tcb_status);
+        bytes.extend_from_slice(&self.fmspc);
+        bytes.extend_from_slice(self.quote_body.as_bytes());
+
+        if let Some(ref ids) = self.advisory_ids {
+            let encoded = ids.abi_encode();
+            bytes.extend_from_slice(&encoded);
+        }
+
+        bytes
+    }
 }
