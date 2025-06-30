@@ -1,5 +1,4 @@
 use std::time::SystemTime;
-
 use x509_cert::{certificate::CertificateInner, crl::CertificateList};
 
 pub mod keccak {
@@ -76,7 +75,7 @@ pub mod u32_hex {
     use serde::Serializer;
     use zerocopy::AsBytes;
 
-    use crate::types::UInt32LE;
+    type UInt32LE = zerocopy::little_endian::U32;
 
     pub fn deserialize<'de, D>(deserializer: D) -> std::result::Result<UInt32LE, D::Error>
     where
