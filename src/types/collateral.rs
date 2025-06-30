@@ -1,11 +1,12 @@
 #[cfg(feature = "zero-copy")]
 use crate::utils::cert_chain_processor;
 use crate::utils::{cert_chain, crl};
+use crate::utils::keccak;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 #[cfg(not(feature = "zero-copy"))]
 use x509_cert::certificate::CertificateInner;
-use x509_cert::{Certificate, crl::CertificateList, der::Decode};
+use x509_cert::{crl::CertificateList, der::{Decode, Encode}};
 
 use super::{enclave_identity::QuotingEnclaveIdentityAndSignature, tcb_info::TcbInfoAndSignature};
 
@@ -31,7 +32,7 @@ pub struct Collateral {
     /// TCB Info and Identity Issuer Chain in PEM format
     /// Chain of certificates used to verify TCB Info and Identity signature.
     #[serde(with = "cert_chain")]
-    pub tcb_info_and_qe_identity_issuer_chain: Vec<Certificate>,
+    pub tcb_info_and_qe_identity_issuer_chain: Vec<CertificateInner>,
 
     /* Structured Data */
     /// TCB Info Structure
@@ -54,10 +55,10 @@ impl Collateral {
         let root_ca_crl = CertificateList::from_der(root_ca_crl_der)?;
         let pck_crl = CertificateList::from_der(pck_crl_der)?;
         #[cfg(not(feature = "zero-copy"))]
-        let tcb_info_and_qe_identity_issuer_chain: Vec<Certificate> =
+        let tcb_info_and_qe_identity_issuer_chain: Vec<CertificateInner> =
             CertificateInner::load_pem_chain(tcb_info_and_qe_identity_issuer_chain_pem_bytes)?;
         #[cfg(feature = "zero-copy")]
-        let tcb_info_and_qe_identity_issuer_chain: Vec<Certificate> =
+        let tcb_info_and_qe_identity_issuer_chain: Vec<CertificateInner> =
             cert_chain_processor::load_pem_chain_bpf_friendly(
                 tcb_info_and_qe_identity_issuer_chain_pem_bytes,
             )?;
@@ -72,6 +73,16 @@ impl Collateral {
             tcb_info,
             qe_identity,
         })
+    }
+
+    pub fn get_cert_hash(cert: &CertificateInner) -> Result<[u8; 32]> {
+        let tbs = cert.tbs_certificate.to_der()?;
+        Ok(keccak::hash(&tbs))
+    }
+
+    pub fn get_crl_hash(crl: &CertificateList) -> Result<[u8; 32]> {
+        let tbs = crl.tbs_cert_list.to_der()?;
+        Ok(keccak::hash(&tbs))
     }
 }
 
