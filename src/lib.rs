@@ -78,33 +78,34 @@ pub fn verify_dcap_quote(
     let mut tcb_status;
     if quote.header.tee_type == TDX_TEE_TYPE {
         tcb_status = tdx_tcb_status;
-        let tdx_module_status =
+        let tdx_module_tcb_status =
             verify_tdx_module(&tcb_info, quote.body.as_tdx_report_body().unwrap())?;
-        tcb_status = TcbInfo::converge_tcb_status_with_tdx_module(tcb_status, tdx_module_status);
+        tcb_status =
+            TcbInfo::converge_tcb_status_with_tdx_module(tcb_status, tdx_module_tcb_status);
+
+        if let QuoteBody::Td15QuoteBody(td_report) = &quote.body {
+            let (relaunch_needed, configuration_needed) = check_for_relaunch(
+                &tcb_info,
+                td_report,
+                qe_tcb_status,
+                sgx_tcb_status,
+                tdx_tcb_status,
+                tdx_module_tcb_status,
+            );
+            if relaunch_needed {
+                if configuration_needed {
+                    tcb_status = TcbStatus::RelaunchAdvisedConfigurationNeeded;
+                } else {
+                    tcb_status = TcbStatus::RelaunchAdvised;
+                }
+            }
+        }
     } else {
         tcb_status = sgx_tcb_status;
     }
 
     // 5. Converge platform TCB status with QE TCB status
     tcb_status = TcbInfo::converge_tcb_status_with_qe_tcb(tcb_status, qe_tcb_status.into());
-
-    // 6. Perform Relaunch Check if the quote contains a TD 1.5 Report
-    if let QuoteBody::Td15QuoteBody(td_report) = &quote.body {
-        let (relaunch_needed, configuration_needed) = check_for_relaunch(
-            &tcb_info,
-            td_report,
-            qe_tcb_status,
-            sgx_tcb_status,
-            tdx_tcb_status,
-        );
-        if relaunch_needed {
-            if configuration_needed {
-                tcb_status = TcbStatus::RelaunchAdvisedConfigurationNeeded;
-            } else {
-                tcb_status = TcbStatus::RelaunchAdvised;
-            }
-        }
-    }
 
     Ok(VerifiedOutput {
         quote_version: quote.header.version.get(),
