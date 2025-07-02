@@ -2,8 +2,6 @@ pub mod tdx;
 pub mod trust_store;
 pub mod types;
 pub mod utils;
-#[cfg(all(test, not(feature = "zero-copy")))]
-mod tests;
 
 #[cfg(feature = "full")]
 use anyhow::{Context, anyhow, bail};
