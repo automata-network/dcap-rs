@@ -37,7 +37,7 @@ impl VerifiedOutput {
     pub fn to_vec(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&self.quote_version.to_be_bytes());
-        bytes.extend_from_slice(&self.quote_body_type.to_le_bytes());
+        bytes.extend_from_slice(&self.quote_body_type.to_be_bytes());
         bytes.push(self.tcb_status);
         bytes.extend_from_slice(&self.fmspc);
         bytes.extend_from_slice(self.quote_body.as_bytes());
