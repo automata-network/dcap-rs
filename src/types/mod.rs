@@ -60,7 +60,8 @@ impl VerifiedOutput {
         fmspc.copy_from_slice(&slice[5..11]);
 
         let mut offset = 11usize;
-        let quote_body = match u16::from_le_bytes(quote_body_type) {
+        let quote_body_type = u16::from_be_bytes(quote_body_type);
+        let quote_body = match quote_body_type{
             1 => {
                 let raw_quote_body: [u8; ENCLAVE_REPORT_LEN] = slice
                     [offset..offset + ENCLAVE_REPORT_LEN]
@@ -92,7 +93,7 @@ impl VerifiedOutput {
 
         Ok(VerifiedOutput {
             quote_version: u16::from_be_bytes(quote_version),
-            quote_body_type: u16::from_be_bytes(quote_body_type),
+            quote_body_type,
             tcb_status,
             fmspc,
             quote_body,
