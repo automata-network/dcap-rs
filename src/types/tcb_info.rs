@@ -1,6 +1,6 @@
 use std::{str::from_utf8, time::SystemTime};
 
-use anyhow::{Context, bail};
+use anyhow::{Result, Context, bail};
 use chrono::{DateTime, Utc};
 use p256::ecdsa::VerifyingKey;
 use p256::ecdsa::signature::Verifier;
@@ -187,7 +187,7 @@ impl TcbInfo {
         }
     }
 
-    pub fn get_content_hash(&self) -> [u8; 32] {
+    pub fn get_content_hash(&self) -> Result<[u8; 32]> {
         let id: u8 = match &self.id {
             Some(id) => {
                 if id == "SGX" {
@@ -207,17 +207,17 @@ impl TcbInfo {
         pre_image.extend_from_slice(&u32::from(self.version).to_be_bytes());
         pre_image.extend_from_slice(&self.fmspc_bytes());
         pre_image.extend_from_slice(&self.pce_id_bytes());
-        pre_image.extend_from_slice(serde_json::to_vec(&self.tcb_levels).unwrap().as_slice());
+        pre_image.extend_from_slice(serde_json::to_vec(&self.tcb_levels)?.as_slice());
 
         if let Some(tdx_module) = &self.tdx_module {
-            pre_image.extend_from_slice(&serde_json::to_vec(tdx_module).unwrap());
+            pre_image.extend_from_slice(&serde_json::to_vec(tdx_module)?);
         }
 
         if let Some(tdx_module_identities) = &self.tdx_module_identities {
-            pre_image.extend_from_slice(&serde_json::to_vec(tdx_module_identities).unwrap());
+            pre_image.extend_from_slice(&serde_json::to_vec(tdx_module_identities)?);
         }
 
-        keccak::hash(&pre_image)
+        Ok(keccak::hash(&pre_image))
     }
 }
 

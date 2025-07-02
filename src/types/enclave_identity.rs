@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{Context, Result};
 use chrono::Utc;
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use serde::{Deserialize, Serialize};
@@ -155,7 +155,7 @@ impl EnclaveIdentity {
             .unwrap_or(QeTcbStatus::Unspecified)
     }
 
-    pub fn get_content_hash(&self) -> [u8; 32] {
+    pub fn get_content_hash(&self) -> Result<[u8; 32]> {
         let mut pre_image: Vec<u8> = vec![];
         pre_image.extend_from_slice(&[u8::from(self.id)]);
         pre_image.extend_from_slice(&self.version.to_be_bytes());
@@ -166,8 +166,8 @@ impl EnclaveIdentity {
         pre_image.extend_from_slice(&self.attributes_mask_bytes());
         pre_image.extend_from_slice(&self.mrsigner_bytes());
         pre_image.extend_from_slice(&self.isvprodid.to_be_bytes());
-        pre_image.extend_from_slice(serde_json::to_vec(&self.tcb_levels).unwrap().as_slice());
-        keccak::hash(&pre_image)
+        pre_image.extend_from_slice(serde_json::to_vec(&self.tcb_levels)?.as_slice());
+        Ok(keccak::hash(&pre_image))
     }
 }
 
