@@ -39,8 +39,8 @@ pub struct EnclaveIdentityHeader {
     pub issue_date_timestamp: i64,
     pub next_update_timestamp: i64,
     pub tcb_evaluation_data_number: u32,
-    pub _final_padding: [u8; 2],
     pub isvprodid: u16,
+    pub _final_padding: [u8; 2],
     // Hex strings (fixed-size byte arrays storing UTF-8 hex characters)
     pub miscselect_hex: [u8; 8],
     pub miscselect_mask_hex: [u8; 8],
@@ -57,7 +57,7 @@ pub struct EnclaveIdentityHeader {
     // issue_date (8) = 8
     // next_update (8) = 8
     // tcb_eval_num (4) = 4
-    // _final_padding (2) + isvprodid (2) = 4
+    // isvprodid (2) + _final_padding (2) = 4
     // miscselect (8) = 8
     // miscselect_mask (8) = 8
     // attributes (32) = 32
