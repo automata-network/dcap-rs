@@ -1,15 +1,13 @@
 // src/types/pod/enclave_identity/zero_copy/structs.rs
 
 use super::error::ZeroCopyError;
-use super::iterators::{QeTcbLevelIter, AdvisoryIdIter}; // Will define iterators later
-use crate::types::pod::enclave_identity::{
-    EnclaveIdentityHeader, QeTcbLevelPodHeader,
-};
+use super::iterators::{AdvisoryIdIter, QeTcbLevelIter}; // Will define iterators later
+use crate::types::pod::enclave_identity::{EnclaveIdentityHeader, QeTcbLevelPodHeader};
 use bytemuck::Pod;
 
 // Helper to cast slices (can be moved to a shared util if used more widely)
 #[inline]
-fn cast_slice<'a, T: Pod>(slice: &'a [u8]) -> Result<&'a T, ZeroCopyError> {
+fn cast_slice<T: Pod>(slice: &[u8]) -> Result<&T, ZeroCopyError> {
     bytemuck::try_from_bytes(slice).map_err(ZeroCopyError::from_bytemuck_error)
 }
 
@@ -28,15 +26,17 @@ impl<'a> EnclaveIdentityZeroCopy<'a> {
         if bytes.len() < core::mem::size_of::<EnclaveIdentityHeader>() {
             return Err(ZeroCopyError::InvalidSliceLength);
         }
-        let (header_bytes, main_payload) = bytes.split_at(core::mem::size_of::<EnclaveIdentityHeader>());
+        let (header_bytes, main_payload) =
+            bytes.split_at(core::mem::size_of::<EnclaveIdentityHeader>());
         let header: &EnclaveIdentityHeader = cast_slice(header_bytes)?;
 
         let levels_len = header.tcb_levels_total_payload_len as usize;
-        let tcb_levels_section_payload = main_payload.get(0..levels_len)
+        let tcb_levels_section_payload = main_payload
+            .get(0..levels_len)
             .ok_or(ZeroCopyError::InvalidSliceLength)?;
-        
+
         if levels_len > main_payload.len() {
-             return Err(ZeroCopyError::InvalidSliceLength); 
+            return Err(ZeroCopyError::InvalidSliceLength);
         }
 
         Ok(Self {
@@ -46,45 +46,59 @@ impl<'a> EnclaveIdentityZeroCopy<'a> {
     }
 
     // --- Direct Header Accessors ---
-    pub fn id_byte(&self) -> u8 { self.header.id }
-    pub fn version(&self) -> u32 { self.header.version }
-    pub fn issue_date_timestamp(&self) -> i64 { self.header.issue_date_timestamp }
-    pub fn next_update_timestamp(&self) -> i64 { self.header.next_update_timestamp }
-    pub fn tcb_evaluation_data_number(&self) -> u32 { self.header.tcb_evaluation_data_number }
-    pub fn isvprodid(&self) -> u16 { self.header.isvprodid }
-    pub fn miscselect_bytes(&self) -> [u8; 4] { 
-        hex::decode(&self.header.miscselect_hex)
+    pub fn id_byte(&self) -> u8 {
+        self.header.id
+    }
+    pub fn version(&self) -> u32 {
+        self.header.version
+    }
+    pub fn issue_date_timestamp(&self) -> i64 {
+        self.header.issue_date_timestamp
+    }
+    pub fn next_update_timestamp(&self) -> i64 {
+        self.header.next_update_timestamp
+    }
+    pub fn tcb_evaluation_data_number(&self) -> u32 {
+        self.header.tcb_evaluation_data_number
+    }
+    pub fn isvprodid(&self) -> u16 {
+        self.header.isvprodid
+    }
+    pub fn miscselect_bytes(&self) -> [u8; 4] {
+        hex::decode(self.header.miscselect_hex)
             .expect("Failed to decode miscselect_hex")
             .try_into()
             .expect("Failed to convert miscselect_hex to byte array")
-     }
-    pub fn miscselect_mask_bytes(&self) -> [u8; 4] { 
-        hex::decode(&self.header.miscselect_mask_hex)
+    }
+    pub fn miscselect_mask_bytes(&self) -> [u8; 4] {
+        hex::decode(self.header.miscselect_mask_hex)
             .expect("Failed to decode miscselect_mask_hex")
             .try_into()
             .expect("Failed to convert miscselect_mask_hex to byte array")
-     }
-    pub fn attributes_bytes(&self) -> [u8; 16] { 
-        hex::decode(&self.header.attributes_hex)
+    }
+    pub fn attributes_bytes(&self) -> [u8; 16] {
+        hex::decode(self.header.attributes_hex)
             .expect("Failed to decode attributes_hex")
             .try_into()
             .expect("Failed to convert attributes_hex to byte array")
-     }
-    pub fn attributes_mask_bytes(&self) -> [u8; 16] { 
-        hex::decode(&self.header.attributes_mask_hex)
+    }
+    pub fn attributes_mask_bytes(&self) -> [u8; 16] {
+        hex::decode(self.header.attributes_mask_hex)
             .expect("Failed to decode attributes_mask_hex")
             .try_into()
             .expect("Failed to convert attributes_mask_hex to byte array")
-     }
-    pub fn mrsigner_bytes(&self) -> [u8; 32] { 
-        hex::decode(&self.header.mrsigner_hex)
+    }
+    pub fn mrsigner_bytes(&self) -> [u8; 32] {
+        hex::decode(self.header.mrsigner_hex)
             .expect("Failed to decode mrsigner_hex")
             .try_into()
             .expect("Failed to convert mrsigner_hex to byte array")
-     }
-    
+    }
+
     // --- Parsed/Structured Accessors ---
-    pub fn tcb_levels_count(&self) -> u32 { self.header.tcb_levels_count }
+    pub fn tcb_levels_count(&self) -> u32 {
+        self.header.tcb_levels_count
+    }
     pub fn tcb_levels(&self) -> QeTcbLevelIter<'a> {
         QeTcbLevelIter::new(
             self.tcb_levels_section_payload,
@@ -107,7 +121,9 @@ impl<'a> QeTcbLevelZeroCopy<'a> {
         let lengths_len = header.advisory_ids_lengths_array_len as usize;
         let data_len = header.advisory_ids_data_total_len as usize;
 
-        let total_adv_payload_len = lengths_len.checked_add(data_len).ok_or(ZeroCopyError::InvalidOffset)?;
+        let total_adv_payload_len = lengths_len
+            .checked_add(data_len)
+            .ok_or(ZeroCopyError::InvalidOffset)?;
         if total_adv_payload_len > payload.len() {
             return Err(ZeroCopyError::InvalidSliceLength);
         }
@@ -115,14 +131,22 @@ impl<'a> QeTcbLevelZeroCopy<'a> {
         Ok(Self {
             header,
             advisory_ids_lengths_payload: &payload[..lengths_len],
-            advisory_ids_data_payload: &payload[lengths_len .. lengths_len + data_len],
+            advisory_ids_data_payload: &payload[lengths_len..lengths_len + data_len],
         })
     }
 
-    pub fn isvsvn(&self) -> u16 { self.header.isvsvn }
-    pub fn tcb_status_byte(&self) -> u8 { self.header.tcb_status }
-    pub fn tcb_date_timestamp(&self) -> i64 { self.header.tcb_date_timestamp }
-    pub fn advisory_ids_count(&self) -> u32 { self.header.advisory_ids_count }
+    pub fn isvsvn(&self) -> u16 {
+        self.header.isvsvn
+    }
+    pub fn tcb_status_byte(&self) -> u8 {
+        self.header.tcb_status
+    }
+    pub fn tcb_date_timestamp(&self) -> i64 {
+        self.header.tcb_date_timestamp
+    }
+    pub fn advisory_ids_count(&self) -> u32 {
+        self.header.advisory_ids_count
+    }
 
     pub fn advisory_ids(&self) -> AdvisoryIdIter<'a> {
         AdvisoryIdIter::new(

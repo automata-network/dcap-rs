@@ -8,7 +8,7 @@ use core::{mem, str};
 
 // Helper from structs.rs - consider moving to a shared util
 #[inline]
-fn cast_slice<'a, T: Pod>(slice: &'a [u8]) -> Result<&'a T, ZeroCopyError> {
+fn cast_slice<T: Pod>(slice: &[u8]) -> Result<&T, ZeroCopyError> {
     bytemuck::try_from_bytes(slice).map_err(ZeroCopyError::from_bytemuck_error)
 }
 
@@ -53,14 +53,15 @@ impl<'a> Iterator for AdvisoryIdIter<'a> {
             self.current_idx = self.count; // Exhaust iterator
             return Some(Err(ZeroCopyError::InvalidSliceLength));
         }
-        
+
         let len_bytes_slice = self.lengths_payload.get(len_offset..len_bytes_end)?;
         let len = u16::from_le_bytes(match len_bytes_slice.try_into() {
             Ok(arr) => arr,
-            Err(_) => { // Should not happen if previous check passed
+            Err(_) => {
+                // Should not happen if previous check passed
                 self.current_idx = self.count;
                 return Some(Err(ZeroCopyError::InvalidSliceLength));
-            }
+            },
         }) as usize;
 
         let data_end = self.current_data_offset.checked_add(len)?;
@@ -109,10 +110,11 @@ impl<'a> Iterator for QeTcbLevelIter<'a> {
         let header_size = mem::size_of::<QeTcbLevelPodHeader>();
         let header_slice_end = match self.current_offset.checked_add(header_size) {
             Some(end) => end,
-            None => { // Offset calculation overflow
+            None => {
+                // Offset calculation overflow
                 self.current_idx = self.count;
                 return Some(Err(ZeroCopyError::InvalidOffset));
-            }
+            },
         };
 
         if header_slice_end > self.full_payload.len() {
@@ -126,7 +128,7 @@ impl<'a> Iterator for QeTcbLevelIter<'a> {
             Err(e) => {
                 self.current_idx = self.count;
                 return Some(Err(e));
-            }
+            },
         };
 
         let current_item_internal_payload_start = header_slice_end;
@@ -136,19 +138,21 @@ impl<'a> Iterator for QeTcbLevelIter<'a> {
 
         let actual_item_payload_len = match adv_ids_lengths_len.checked_add(adv_ids_data_len) {
             Some(len) => len,
-            None => { // Offset calculation overflow
+            None => {
+                // Offset calculation overflow
                 self.current_idx = self.count;
                 return Some(Err(ZeroCopyError::InvalidOffset));
-            }
+            },
         };
-        
+
         let item_payload_actual_end =
             match current_item_internal_payload_start.checked_add(actual_item_payload_len) {
                 Some(end) => end,
-                None => { // Offset calculation overflow
+                None => {
+                    // Offset calculation overflow
                     self.current_idx = self.count;
                     return Some(Err(ZeroCopyError::InvalidOffset));
-                }
+                },
             };
 
         if item_payload_actual_end > self.full_payload.len() {

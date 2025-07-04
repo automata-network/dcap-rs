@@ -77,41 +77,38 @@ pub fn check_for_relaunch(
     let mut relaunch_needed = false;
     let mut configuration_needed = false;
 
-    if qe_tcb_status != QeTcbStatus::OutOfDate
-        || qe_tcb_status != QeTcbStatus::OutOfDateConfigurationNeeded
+    if (qe_tcb_status != QeTcbStatus::OutOfDate
+        || qe_tcb_status != QeTcbStatus::OutOfDateConfigurationNeeded)
+        && !is_out_of_date(sgx_tcb_status)
+        && is_out_of_date(tdx_tcb_status)
+        && is_out_of_date(tdx_module_tcb_status)
     {
-        if !is_out_of_date(sgx_tcb_status) {
-            if is_out_of_date(tdx_tcb_status) {
-                if is_out_of_date(tdx_module_tcb_status) {
-                    configuration_needed = is_configuration_needed(sgx_tcb_status)
-                        || is_configuration_needed(tdx_tcb_status);
+        configuration_needed =
+            is_configuration_needed(sgx_tcb_status) || is_configuration_needed(tdx_tcb_status);
 
-                    let latest_tcb_level_tdx_svns = tcb_info
-                        .tcb_levels
-                        .first()
-                        .unwrap()
-                        .tcb
-                        .tdx_tcb_components()
-                        .unwrap();
-                    let tdx_module_version = td_report.tee_tcb_svn2[1];
-                    let tdx_module_svns = td_report.tee_tcb_svn2;
+        let latest_tcb_level_tdx_svns = tcb_info
+            .tcb_levels
+            .first()
+            .unwrap()
+            .tcb
+            .tdx_tcb_components()
+            .unwrap();
+        let tdx_module_version = td_report.tee_tcb_svn2[1];
+        let tdx_module_svns = td_report.tee_tcb_svn2;
 
-                    if tdx_module_version == 0 {
-                        if tdx_module_svns[0] >= latest_tcb_level_tdx_svns[0]
-                            && tdx_module_svns[2] >= latest_tcb_level_tdx_svns[2]
-                        {
-                            relaunch_needed = true;
-                        }
-                    } else {
-                        let tdx_module_identity =
-                            find_tdx_module_identity(tdx_module_version, tcb_info).unwrap();
-                        if tdx_module_svns[0] >= tdx_module_identity.tcb_levels[0].tcb.isvsvn
-                            && tdx_module_svns[2] >= latest_tcb_level_tdx_svns[2]
-                        {
-                            relaunch_needed = true;
-                        }
-                    }
-                }
+        if tdx_module_version == 0 {
+            if tdx_module_svns[0] >= latest_tcb_level_tdx_svns[0]
+                && tdx_module_svns[2] >= latest_tcb_level_tdx_svns[2]
+            {
+                relaunch_needed = true;
+            }
+        } else {
+            let tdx_module_identity =
+                find_tdx_module_identity(tdx_module_version, tcb_info).unwrap();
+            if tdx_module_svns[0] >= tdx_module_identity.tcb_levels[0].tcb.isvsvn
+                && tdx_module_svns[2] >= latest_tcb_level_tdx_svns[2]
+            {
+                relaunch_needed = true;
             }
         }
     }

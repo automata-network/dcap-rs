@@ -1,7 +1,5 @@
 // src/types/pod/enclave_identity/zero_copy/conversion.rs
 
-#![cfg(feature = "full")]
-
 use super::error::ZeroCopyError;
 use super::structs::{EnclaveIdentityZeroCopy, QeTcbLevelZeroCopy};
 use crate::types::enclave_identity::{
@@ -41,9 +39,7 @@ fn qe_tcb_status_from_byte(byte: u8) -> Result<QeTcbStatus, ZeroCopyError> {
     }
 }
 
-pub fn qe_tcb_level_from_zero_copy(
-    view: &QeTcbLevelZeroCopy,
-) -> Result<QeTcbLevel, ZeroCopyError> {
+pub fn qe_tcb_level_from_zero_copy(view: &QeTcbLevelZeroCopy) -> Result<QeTcbLevel, ZeroCopyError> {
     let mut advisory_ids_vec = Vec::new();
     if view.advisory_ids_count() > 0 {
         for adv_id_res in view.advisory_ids() {

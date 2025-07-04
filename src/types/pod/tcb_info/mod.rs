@@ -43,12 +43,12 @@ pub struct TdxTcbLevelHeader {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct TdxModuleIdentityHeader {
-    pub mrsigner_hex: [u8; 96],       // Hex string
-    pub attributes_hex: [u8; 16],     // Hex string
+    pub mrsigner_hex: [u8; 96],        // Hex string
+    pub attributes_hex: [u8; 16],      // Hex string
     pub attributes_mask_hex: [u8; 16], // Hex string
-    pub id_len: u8,                   // Length of the ID string (e.g., "TDX_01")
+    pub id_len: u8,                    // Length of the ID string (e.g., "TDX_01")
     pub _padding0: [u8; 7],
-    pub tcb_levels_count: u32,        // Number of TdxTcbLevelHeader + payload sections
+    pub tcb_levels_count: u32, // Number of TdxTcbLevelHeader + payload sections
     pub tcb_levels_total_payload_len: u32, // Total byte length for all TdxTcbLevelHeader sections for this identity
 }
 
@@ -57,8 +57,8 @@ pub struct TdxModuleIdentityHeader {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct TdxModulePodData {
-    pub mrsigner_hex: [u8; 96],       // Hex string
-    pub attributes_hex: [u8; 16],     // Hex string
+    pub mrsigner_hex: [u8; 96],        // Hex string
+    pub attributes_hex: [u8; 16],      // Hex string
     pub attributes_mask_hex: [u8; 16], // Hex string
 }
 
@@ -84,7 +84,7 @@ pub struct TcbLevelHeader {
     pub tdx_components_strings_total_len: u32, // Sum for TDX components, if present (0 otherwise)
     pub advisory_ids_count: u32,
     pub advisory_ids_lengths_array_len: u32, // Total byte length of the array of u16 lengths
-    pub advisory_ids_data_total_len: u32,    // Total byte length of concatenated advisory ID strings
+    pub advisory_ids_data_total_len: u32, // Total byte length of concatenated advisory ID strings
     pub _final_padding: [u8; 4],
 }
 
@@ -95,27 +95,27 @@ pub struct TcbLevelHeader {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable, Default)]
 pub struct TcbInfoHeader {
-    pub id_type: [u8; 6], 
+    pub id_type: [u8; 6],
     pub _pad_id_type: [u8; 2],
-    pub version: u32,     
+    pub version: u32,
     pub _pad_version: [u8; 4],
     pub issue_date_timestamp: i64,
     pub next_update_timestamp: i64,
-    pub fmspc_hex: [u8; 12],          
-    pub pce_id_hex: [u8; 4],          
-    pub tcb_type: u8,                 
+    pub fmspc_hex: [u8; 12],
+    pub pce_id_hex: [u8; 4],
+    pub tcb_type: u8,
     pub _pad_tcb_type: [u8; 3],
-    pub tcb_evaluation_data_number: u32, 
-    
-    pub tdx_module_present: u8, 
+    pub tcb_evaluation_data_number: u32,
+
+    pub tdx_module_present: u8,
     pub _pad_tdx_module_present: [u8; 3],
-    pub tdx_module_data_len: u32, 
+    pub tdx_module_data_len: u32,
 
     pub tdx_module_identities_count: u32,
-    pub tdx_module_identities_total_payload_len: u32, 
+    pub tdx_module_identities_total_payload_len: u32,
 
     pub tcb_levels_count: u32,
-    pub tcb_levels_total_payload_len: u32, 
+    pub tcb_levels_total_payload_len: u32,
 }
 
 // Size = 144 bytes, Alignment = 8 bytes

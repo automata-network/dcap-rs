@@ -1,7 +1,7 @@
 mod common;
 
-use dcap_rs::{verify_dcap_quote, types::quote::Quote};
 use common::*;
+use dcap_rs::{types::quote::Quote, verify_dcap_quote};
 
 #[test]
 fn parse_tdx_v5_quote() {

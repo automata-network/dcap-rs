@@ -1,14 +1,15 @@
 // src/types/pod/enclave_identity/zero_copy/mod.rs
 
 pub mod error;
-pub mod structs;
 pub mod iterators;
+pub mod structs;
 
 #[cfg(feature = "full")]
 pub mod conversion;
 
 pub use error::ZeroCopyError; // error.rs is a submodule
-pub use structs::{ // structs.rs is a submodule
+pub use structs::{
+    // structs.rs is a submodule
     EnclaveIdentityZeroCopy,
     QeTcbLevelZeroCopy,
 };

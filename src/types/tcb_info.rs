@@ -1,6 +1,6 @@
 use std::{str::from_utf8, time::SystemTime};
 
-use anyhow::{Result, Context, bail};
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use p256::ecdsa::VerifyingKey;
 use p256::ecdsa::signature::Verifier;

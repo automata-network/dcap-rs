@@ -36,25 +36,22 @@ pub fn tcb_info_from_zero_copy(view: &TcbInfoZeroCopy) -> Result<TcbInfo, ZeroCo
         TcbInfoVersion::try_from(view.version()).map_err(|_| ZeroCopyError::InvalidEnumValue)?;
 
     let issue_date = Utc
-        .timestamp_opt(view.issue_date_timestamp() as i64, 0)
+        .timestamp_opt(view.issue_date_timestamp(), 0)
         .single()
         .ok_or(ZeroCopyError::InvalidOffset)?;
     let next_update = Utc
-        .timestamp_opt(view.next_update_timestamp() as i64, 0)
+        .timestamp_opt(view.next_update_timestamp(), 0)
         .single()
         .ok_or(ZeroCopyError::InvalidOffset)?;
 
     let fmspc = zero_copy_bytes_to_string(&view.header.fmspc_hex);
     let pce_id = zero_copy_bytes_to_string(&view.header.pce_id_hex);
 
-    let tdx_module: Option<TdxModule> = match view.tdx_module() {
-        Some(tdx_mod_view) => Some(TdxModule {
-            mrsigner: zero_copy_bytes_to_string(&tdx_mod_view.data.mrsigner_hex),
-            attributes: zero_copy_bytes_to_string(&tdx_mod_view.data.attributes_hex),
-            attributes_mask: zero_copy_bytes_to_string(&tdx_mod_view.data.attributes_mask_hex),
-        }),
-        None => None,
-    };
+    let tdx_module: Option<TdxModule> = view.tdx_module().map(|tdx_mod_view| TdxModule {
+        mrsigner: zero_copy_bytes_to_string(&tdx_mod_view.data.mrsigner_hex),
+        attributes: zero_copy_bytes_to_string(&tdx_mod_view.data.attributes_hex),
+        attributes_mask: zero_copy_bytes_to_string(&tdx_mod_view.data.attributes_mask_hex),
+    });
 
     let mut tdx_module_identities_vec = Vec::new();
     if view.tdx_module_identities_count() > 0 {
@@ -75,7 +72,7 @@ pub fn tcb_info_from_zero_copy(view: &TcbInfoZeroCopy) -> Result<TcbInfo, ZeroCo
                             isvsvn: tdx_tcb_level_view.tcb_isvsvn(),
                         },
                         tcb_date: Utc
-                            .timestamp_opt(tdx_tcb_level_view.tcb_date_timestamp() as i64, 0)
+                            .timestamp_opt(tdx_tcb_level_view.tcb_date_timestamp(), 0)
                             .single()
                             .ok_or(ZeroCopyError::InvalidOffset)?,
                         tcb_status: TcbStatus::try_from(tdx_tcb_level_view.tcb_status())
@@ -180,7 +177,7 @@ pub fn tcb_info_from_zero_copy(view: &TcbInfoZeroCopy) -> Result<TcbInfo, ZeroCo
             let tcb_level_app = TcbLevel {
                 tcb: tcb_app,
                 tcb_date: Utc
-                    .timestamp_opt(tcb_level_view.tcb_date_timestamp() as i64, 0)
+                    .timestamp_opt(tcb_level_view.tcb_date_timestamp(), 0)
                     .single()
                     .ok_or(ZeroCopyError::InvalidOffset)?,
                 tcb_status: TcbStatus::try_from(tcb_level_view.tcb_status())

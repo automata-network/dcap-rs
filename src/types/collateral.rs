@@ -1,12 +1,15 @@
 #[cfg(feature = "zero-copy")]
 use crate::utils::cert_chain_processor;
-use crate::utils::{cert_chain, crl};
 use crate::utils::keccak;
+use crate::utils::{cert_chain, crl};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 #[cfg(not(feature = "zero-copy"))]
 use x509_cert::certificate::CertificateInner;
-use x509_cert::{crl::CertificateList, der::{Decode, Encode}};
+use x509_cert::{
+    crl::CertificateList,
+    der::{Decode, Encode},
+};
 
 use super::{enclave_identity::QuotingEnclaveIdentityAndSignature, tcb_info::TcbInfoAndSignature};
 

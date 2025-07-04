@@ -21,7 +21,9 @@ impl ZeroCopyError {
     // Assuming it's used within the zero_copy module:
     pub(super) fn from_bytemuck_error(e: bytemuck::PodCastError) -> Self {
         match e {
-            bytemuck::PodCastError::TargetAlignmentGreaterAndInputNotAligned => ZeroCopyError::AlignmentError,
+            bytemuck::PodCastError::TargetAlignmentGreaterAndInputNotAligned => {
+                ZeroCopyError::AlignmentError
+            },
             bytemuck::PodCastError::OutputSliceWouldHaveSlop => ZeroCopyError::OutputWouldHaveSlop,
             bytemuck::PodCastError::SizeMismatch => ZeroCopyError::InvalidSliceLength, // Or a more specific SizeMismatch variant
             _ => ZeroCopyError::PodCastError,
@@ -37,12 +39,22 @@ impl core::fmt::Display for ZeroCopyError {
             ZeroCopyError::InvalidOffset => "Invalid offset calculation or out of bounds",
             ZeroCopyError::DataNotPresent => "Expected data not present where indicated",
             ZeroCopyError::InvalidEnumValue => "Invalid value for enum conversion",
-            ZeroCopyError::AlignmentError => "Input slice is not sufficiently aligned for the target type",
-            ZeroCopyError::OutputWouldHaveSlop => "Output slice would have uninitialized trailing padding bytes",
+            ZeroCopyError::AlignmentError => {
+                "Input slice is not sufficiently aligned for the target type"
+            },
+            ZeroCopyError::OutputWouldHaveSlop => {
+                "Output slice would have uninitialized trailing padding bytes"
+            },
             ZeroCopyError::PodCastError => "A general bytemuck PodCastError occurred",
-            ZeroCopyError::UnexpectedSgxComponentCount => "Unexpected number of SGX TCB components encountered",
-            ZeroCopyError::NoMatchingSgxTcbLevel => "No matching SGX TCB level found for the provided PCK extension",
-            ZeroCopyError::MissingTdxComponentsInTcbInfo => "TDX TCB components missing in TCB Info for a TDX quote",
+            ZeroCopyError::UnexpectedSgxComponentCount => {
+                "Unexpected number of SGX TCB components encountered"
+            },
+            ZeroCopyError::NoMatchingSgxTcbLevel => {
+                "No matching SGX TCB level found for the provided PCK extension"
+            },
+            ZeroCopyError::MissingTdxComponentsInTcbInfo => {
+                "TDX TCB components missing in TCB Info for a TDX quote"
+            },
         };
         write!(f, "{}", msg)
     }

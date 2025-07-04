@@ -61,7 +61,7 @@ impl VerifiedOutput {
 
         let mut offset = 11usize;
         let quote_body_type = u16::from_be_bytes(quote_body_type);
-        let quote_body = match quote_body_type{
+        let quote_body = match quote_body_type {
             1 => {
                 let raw_quote_body: [u8; ENCLAVE_REPORT_LEN] = slice
                     [offset..offset + ENCLAVE_REPORT_LEN]

@@ -14,7 +14,7 @@ use core::mem; // For align_of
 
 // Helper from structs.rs - consider moving to a shared util if this pattern repeats more
 #[inline]
-fn cast_slice<'a, T: Pod>(slice: &'a [u8]) -> Result<&'a T, ZeroCopyError> {
+fn cast_slice<T: Pod>(slice: &[u8]) -> Result<&T, ZeroCopyError> {
     bytemuck::try_from_bytes(slice).map_err(ZeroCopyError::from_bytemuck_error)
 }
 
@@ -130,7 +130,7 @@ impl<'a> Iterator for TdxTcbLevelIter<'a> {
                 Some(end) => end,
                 None => return Some(Err(ZeroCopyError::InvalidOffset)),
             };
-        
+
         if item_payload_actual_end > self.full_payload.len() {
             return Some(Err(ZeroCopyError::InvalidSliceLength));
         }
@@ -192,7 +192,7 @@ impl<'a> Iterator for TdxModuleIdentityIter<'a> {
         let current_item_internal_offset = header_end;
 
         let alignment = mem::align_of::<TdxTcbLevelHeader>();
-        let offset = header.id_len as usize + (alignment - 1) & !(alignment - 1);
+        let offset = (header.id_len as usize + (alignment - 1)) & !(alignment - 1);
         let actual_item_payload_len = (offset)
             .checked_add(header.tcb_levels_total_payload_len as usize)
             .ok_or(ZeroCopyError::InvalidOffset);

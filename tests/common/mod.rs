@@ -4,9 +4,9 @@ use x509_cert::{crl::CertificateList, der::Decode};
 
 use dcap_rs::types::tcb_info::TcbInfoAndSignature;
 use dcap_rs::{
-    types::enclave_identity::QuotingEnclaveIdentityAndSignature, 
-    utils::cert_chain_processor,
+    types::enclave_identity::QuotingEnclaveIdentityAndSignature,
     types::{collateral::Collateral, quote::Quote},
+    utils::cert_chain_processor,
 };
 
 pub fn sgx_quote_data() -> (Collateral, Quote<'static>) {

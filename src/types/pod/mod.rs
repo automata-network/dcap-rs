@@ -1,2 +1,2 @@
-pub mod tcb_info;
 pub mod enclave_identity;
+pub mod tcb_info;

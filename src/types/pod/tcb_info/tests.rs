@@ -35,7 +35,7 @@ fn test_tcb_v2_sgx_bytemuck() {
 
     // Integrity Check
     let original_tcb_info_hash =
-        Sha256::digest(&tcb_info_and_signature.tcb_info_raw.get().as_bytes());
+        Sha256::digest(tcb_info_and_signature.tcb_info_raw.get().as_bytes());
     let parsed_tcb_info_string = serde_json::to_string(&parsed_tcb_info)
         .expect("Failed to serialize parsed TcbInfoV2 to JSON string");
     let parsed_tcb_info_hash = Sha256::digest(parsed_tcb_info_string.as_bytes());
@@ -66,10 +66,7 @@ fn test_tcb_v2_sgx_bytemuck() {
         tcb_info_zero_copy.next_update_timestamp(),
         original_tcb_info.next_update.timestamp()
     );
-    assert_eq!(
-        tcb_info_zero_copy.fmspc(),
-        original_tcb_info.fmspc_bytes()
-    );
+    assert_eq!(tcb_info_zero_copy.fmspc(), original_tcb_info.fmspc_bytes());
     assert_eq!(
         tcb_info_zero_copy.pce_id(),
         original_tcb_info.pce_id_bytes()
@@ -173,7 +170,7 @@ fn test_tcb_v3_sgx_bytemuck() {
 
     // Integrity Check
     let original_tcb_info_hash =
-        Sha256::digest(&tcb_info_and_signature.tcb_info_raw.get().as_bytes());
+        Sha256::digest(tcb_info_and_signature.tcb_info_raw.get().as_bytes());
     let parsed_tcb_info_string = serde_json::to_string(&parsed_tcb_info)
         .expect("Failed to serialize parsed TcbInfoV3 SGX to JSON string");
     let parsed_tcb_info_hash = Sha256::digest(parsed_tcb_info_string.as_bytes());
@@ -200,10 +197,7 @@ fn test_tcb_v3_sgx_bytemuck() {
         tcb_info_zero_copy.next_update_timestamp(),
         original_tcb_info.next_update.timestamp()
     );
-    assert_eq!(
-        tcb_info_zero_copy.fmspc(),
-        original_tcb_info.fmspc_bytes()
-    );
+    assert_eq!(tcb_info_zero_copy.fmspc(), original_tcb_info.fmspc_bytes());
     assert_eq!(
         tcb_info_zero_copy.pce_id(),
         original_tcb_info.pce_id_bytes()
@@ -329,7 +323,7 @@ fn test_tcb_v3_tdx_bytemuck() {
 
     // Integrity Check
     let original_tcb_info_hash =
-        Sha256::digest(&tcb_info_and_signature.tcb_info_raw.get().as_bytes());
+        Sha256::digest(tcb_info_and_signature.tcb_info_raw.get().as_bytes());
     let parsed_tcb_info_string = serde_json::to_string(&parsed_tcb_info)
         .expect("Failed to serialize parsed TcbInfoV3 SGX to JSON string");
     let parsed_tcb_info_hash = Sha256::digest(parsed_tcb_info_string.as_bytes());
@@ -356,10 +350,7 @@ fn test_tcb_v3_tdx_bytemuck() {
         tcb_info_zero_copy.next_update_timestamp(),
         original_tcb_info.next_update.timestamp()
     );
-    assert_eq!(
-        tcb_info_zero_copy.fmspc(),
-        original_tcb_info.fmspc_bytes()
-    );
+    assert_eq!(tcb_info_zero_copy.fmspc(), original_tcb_info.fmspc_bytes());
     assert_eq!(
         tcb_info_zero_copy.pce_id(),
         original_tcb_info.pce_id_bytes()
@@ -407,8 +398,7 @@ fn test_tcb_v3_tdx_bytemuck() {
                 tdx_module_identity.expect("Failed to get TDX module identity from view");
             assert_eq!(
                 tdx_module_identity.mrsigner(),
-                original_tdx_module_identities[i]
-                    .mrsigner_bytes()
+                original_tdx_module_identities[i].mrsigner_bytes()
             );
             assert_eq!(
                 tdx_module_identity.attributes(),

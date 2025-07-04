@@ -18,13 +18,13 @@ mod tests;
 #[derive(Copy, Clone, Debug, Pod, Zeroable)] // Removed Default, not needed for bytemuck if zeroed
 pub struct QeTcbLevelPodHeader {
     pub isvsvn: u16,
-    pub tcb_status: u8, // Represents QeTcbStatus enum
+    pub tcb_status: u8,     // Represents QeTcbStatus enum
     pub _padding0: [u8; 5], // Align to 8 for tcb_date_timestamp
     pub tcb_date_timestamp: i64,
     pub advisory_ids_count: u32,
     pub advisory_ids_lengths_array_len: u32, // Total byte length of the array of u16 lengths
-    pub advisory_ids_data_total_len: u32,    // Total byte length of concatenated advisory ID strings
-    pub _padding1: [u8; 4], // Ensure struct size is multiple of alignment (8)
+    pub advisory_ids_data_total_len: u32, // Total byte length of concatenated advisory ID strings
+    pub _padding1: [u8; 4],               // Ensure struct size is multiple of alignment (8)
 }
 
 /// Main header for Enclave Identity.
@@ -33,7 +33,7 @@ pub struct QeTcbLevelPodHeader {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)] // Removed Default
 pub struct EnclaveIdentityHeader {
-    pub id: u8, // Represents EnclaveType enum (e.g., 0: Qe, 1: Qve, 2: TdQe)
+    pub id: u8,               // Represents EnclaveType enum (e.g., 0: Qe, 1: Qve, 2: TdQe)
     pub _padding_id: [u8; 3], // Align to 4 for version
     pub version: u32,
     pub issue_date_timestamp: i64,
@@ -47,26 +47,25 @@ pub struct EnclaveIdentityHeader {
     pub attributes_hex: [u8; 32],
     pub attributes_mask_hex: [u8; 32],
     pub mrsigner_hex: [u8; 64],
-    
+
     pub tcb_levels_count: u32,
     pub tcb_levels_total_payload_len: u32, // Total byte length for all QeTcbLevelPodHeader sections + their payloads
-    // Ensure total size is a multiple of 8 (max alignment of fields)
-    // Current size before this padding:
-    // id (1) + pad_id (3) = 4
-    // version (4) = 4
-    // issue_date (8) = 8
-    // next_update (8) = 8
-    // tcb_eval_num (4) = 4
-    // isvprodid (2) + _final_padding (2) = 4
-    // miscselect (8) = 8
-    // miscselect_mask (8) = 8
-    // attributes (32) = 32
-    // attributes_mask (32) = 32
-    // mrsigner (64) = 64
-    // tcb_levels_count (4) = 4
-    // tcb_levels_total_payload_len (4) = 4
-    // Total = 4+4+8+8+4+4+8+8+32+32+64+4+4 = 184
-    
+                                           // Ensure total size is a multiple of 8 (max alignment of fields)
+                                           // Current size before this padding:
+                                           // id (1) + pad_id (3) = 4
+                                           // version (4) = 4
+                                           // issue_date (8) = 8
+                                           // next_update (8) = 8
+                                           // tcb_eval_num (4) = 4
+                                           // isvprodid (2) + _final_padding (2) = 4
+                                           // miscselect (8) = 8
+                                           // miscselect_mask (8) = 8
+                                           // attributes (32) = 32
+                                           // attributes_mask (32) = 32
+                                           // mrsigner (64) = 64
+                                           // tcb_levels_count (4) = 4
+                                           // tcb_levels_total_payload_len (4) = 4
+                                           // Total = 4+4+8+8+4+4+8+8+32+32+64+4+4 = 184
 }
 
 /// The top-level POD structure for Enclave Identity and its signature.
@@ -84,7 +83,7 @@ pub struct EnclaveIdentityPod {
 #[cfg(test)]
 mod pod_layout_tests {
     use super::*;
-    use core::mem::{size_of, align_of};
+    use core::mem::{align_of, size_of};
 
     #[test]
     fn check_qe_tcb_level_pod_header_layout() {

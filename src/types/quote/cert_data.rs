@@ -74,7 +74,9 @@ impl<'a> QuoteCertData<'a> {
         let first_cert = cert_chain_processor::load_first_cert_from_pem_data(self.cert_data)
             .context("Failed to parse PCK certificate chain")?;
 
-        let pck_extension = first_cert.tbs_certificate.extensions
+        let pck_extension = first_cert
+            .tbs_certificate
+            .extensions
             .as_ref()
             .and_then(|extensions| {
                 extensions

@@ -162,9 +162,8 @@ pub mod cert_chain_processor {
         let cert_slice = &pem_data[start..end];
 
         // Try PEM format first
-        match CertificateInner::from_pem(cert_slice) {
-            Ok(cert) => return Ok(cert),
-            Err(_) => {}, // Try DER next
+        if let Ok(cert) = CertificateInner::from_pem(cert_slice) {
+            return Ok(cert);
         }
 
         // Try DER format as fallback (if this was base64 decoded already)
@@ -199,7 +198,6 @@ pub mod cert_chain_processor {
         }
         parse_single_cert(pem_data, ranges[0])
     }
-
 }
 
 pub trait Expireable {

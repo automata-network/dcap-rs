@@ -1,7 +1,5 @@
 // src/types/pod/enclave_identity/serialize.rs
 
-#![cfg(feature = "full")]
-
 use super::zero_copy::{EnclaveIdentityZeroCopy, conversion::enclave_identity_from_zero_copy};
 use super::{EnclaveIdentityHeader, QeTcbLevelPodHeader};
 use crate::types::enclave_identity::{EnclaveIdentity, EnclaveType};
@@ -84,7 +82,7 @@ impl SerializedEnclaveIdentity {
         header.attributes_hex = hex_chars_to_fixed_bytes::<32>(&rust_ei.attributes);
         header.attributes_mask_hex = hex_chars_to_fixed_bytes::<32>(&rust_ei.attributes_mask);
         header.mrsigner_hex = hex_chars_to_fixed_bytes::<64>(&rust_ei.mrsigner);
-        
+
         let tcb_levels_payload_start_offset = current_payload_offset;
         header.tcb_levels_count = rust_ei.tcb_levels.len() as u32;
 
@@ -110,8 +108,7 @@ impl SerializedEnclaveIdentity {
             }
             qe_tcb_level_header.advisory_ids_lengths_array_len =
                 advisory_id_lengths_bytes.len() as u32;
-            qe_tcb_level_header.advisory_ids_data_total_len =
-                advisory_id_data_bytes.len() as u32;
+            qe_tcb_level_header.advisory_ids_data_total_len = advisory_id_data_bytes.len() as u32;
 
             payload_bytes.extend_from_slice(bytemuck::bytes_of(&qe_tcb_level_header));
             current_payload_offset += mem::size_of::<QeTcbLevelPodHeader>();
@@ -121,11 +118,11 @@ impl SerializedEnclaveIdentity {
 
             payload_bytes.extend_from_slice(&advisory_id_data_bytes);
             current_payload_offset += advisory_id_data_bytes.len();
-            
+
             // Add padding for the *next* QeTcbLevelPodHeader
             let padding_added = append_padding_to_align(
                 &mut payload_bytes,
-                mem::align_of::<QeTcbLevelPodHeader>() // Align to 8
+                mem::align_of::<QeTcbLevelPodHeader>(), // Align to 8
             );
             current_payload_offset += padding_added;
         }
@@ -146,9 +143,8 @@ pub fn serialize_enclave_identity_pod(
     signature: &[u8; 64],
 ) -> Vec<u8> {
     let header_bytes = bytemuck::bytes_of(&serialized_ei.header);
-    let mut pod_bytes = Vec::with_capacity(
-        signature.len() + header_bytes.len() + serialized_ei.payload.len(),
-    );
+    let mut pod_bytes =
+        Vec::with_capacity(signature.len() + header_bytes.len() + serialized_ei.payload.len());
     pod_bytes.extend_from_slice(signature);
     pod_bytes.extend_from_slice(header_bytes);
     pod_bytes.extend_from_slice(&serialized_ei.payload);
@@ -157,7 +153,9 @@ pub fn serialize_enclave_identity_pod(
 
 /// Parses a byte slice representing an EnclaveIdentityPod into an application-level EnclaveIdentity and the signature.
 /// Expects bytes in the layout: signature | EnclaveIdentityHeader | payload.
-pub fn parse_enclave_identity_pod_bytes(pod_bytes: &[u8]) -> Result<(EnclaveIdentity, [u8; 64]), String> {
+pub fn parse_enclave_identity_pod_bytes(
+    pod_bytes: &[u8],
+) -> Result<(EnclaveIdentity, [u8; 64]), String> {
     let signature_len = 64;
     let header_len = mem::size_of::<EnclaveIdentityHeader>();
     let min_len = signature_len + header_len;
@@ -186,8 +184,12 @@ pub fn parse_enclave_identity_pod_bytes(pod_bytes: &[u8]) -> Result<(EnclaveIden
     let ei_zero_copy_view = EnclaveIdentityZeroCopy::from_bytes(ei_header_and_payload_bytes)
         .map_err(|e| format!("Failed to create EnclaveIdentityZeroCopy view: {:?}", e))?;
 
-    let rust_ei = enclave_identity_from_zero_copy(&ei_zero_copy_view)
-        .map_err(|e| format!("Failed to convert EnclaveIdentityZeroCopy to EnclaveIdentity: {:?}", e))?;
+    let rust_ei = enclave_identity_from_zero_copy(&ei_zero_copy_view).map_err(|e| {
+        format!(
+            "Failed to convert EnclaveIdentityZeroCopy to EnclaveIdentity: {:?}",
+            e
+        )
+    })?;
 
     Ok((rust_ei, signature))
 }

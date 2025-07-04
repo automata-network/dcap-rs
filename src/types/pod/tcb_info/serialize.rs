@@ -101,8 +101,7 @@ impl SerializedTcbInfo {
                     let mut tdx_tcb_level_header = TdxTcbLevelHeader::zeroed();
                     tdx_tcb_level_header.tcb_isvsvn = tdx_tcb_level.tcb.isvsvn;
                     tdx_tcb_level_header.tcb_status = tdx_tcb_level.tcb_status as u8;
-                    tdx_tcb_level_header.tcb_date_timestamp =
-                        tdx_tcb_level.tcb_date.timestamp();
+                    tdx_tcb_level_header.tcb_date_timestamp = tdx_tcb_level.tcb_date.timestamp();
 
                     let mut advisory_id_lengths_bytes = Vec::new();
                     let mut advisory_id_data_bytes = Vec::new();
@@ -131,7 +130,7 @@ impl SerializedTcbInfo {
                     // Add padding for the *next* TdxTcbLevelHeader in this sub-list
                     append_padding_to_align(
                         &mut tdx_tcb_levels_payload_for_identity,
-                        mem::align_of::<TdxTcbLevelHeader>() // Align to 8
+                        mem::align_of::<TdxTcbLevelHeader>(), // Align to 8
                     );
                 }
                 identity_header.tcb_levels_total_payload_len =
@@ -147,17 +146,17 @@ impl SerializedTcbInfo {
                 // as TdxTcbLevelHeader requires 8-byte alignment.
                 let padding_for_tdx_tcb_level_list = append_padding_to_align(
                     &mut payload_bytes,
-                    mem::align_of::<TdxTcbLevelHeader>() // Align to 8
+                    mem::align_of::<TdxTcbLevelHeader>(), // Align to 8
                 );
                 current_payload_offset += padding_for_tdx_tcb_level_list;
 
                 payload_bytes.extend_from_slice(&tdx_tcb_levels_payload_for_identity);
                 current_payload_offset += tdx_tcb_levels_payload_for_identity.len();
-                
+
                 // Add padding for the *next* TdxModuleIdentityHeader
                 let padding_added_for_next_identity = append_padding_to_align(
                     &mut payload_bytes,
-                    mem::align_of::<TdxModuleIdentityHeader>() // Align to 4
+                    mem::align_of::<TdxModuleIdentityHeader>(), // Align to 4
                 );
                 current_payload_offset += padding_added_for_next_identity;
             }
@@ -188,8 +187,8 @@ impl SerializedTcbInfo {
                             .component_type
                             .as_deref()
                             .unwrap_or("");
-                        comp_header_ref.category_len = cat_str.as_bytes().len() as u8;
-                        comp_header_ref.component_type_len = type_str.as_bytes().len() as u8;
+                        comp_header_ref.category_len = cat_str.len() as u8;
+                        comp_header_ref.component_type_len = type_str.len() as u8;
                         sgx_components_payload_strings.extend_from_slice(cat_str.as_bytes());
                         sgx_components_payload_strings.extend_from_slice(type_str.as_bytes());
                     }
@@ -200,8 +199,8 @@ impl SerializedTcbInfo {
                             comp_header_ref.cpusvn = tdx_comps_v3[i].svn;
                             let cat_str = tdx_comps_v3[i].category.as_deref().unwrap_or("");
                             let type_str = tdx_comps_v3[i].component_type.as_deref().unwrap_or("");
-                            comp_header_ref.category_len = cat_str.as_bytes().len() as u8;
-                            comp_header_ref.component_type_len = type_str.as_bytes().len() as u8;
+                            comp_header_ref.category_len = cat_str.len() as u8;
+                            comp_header_ref.component_type_len = type_str.len() as u8;
                             tdx_components_payload_strings_for_level
                                 .extend_from_slice(cat_str.as_bytes());
                             tdx_components_payload_strings_for_level
@@ -265,7 +264,7 @@ impl SerializedTcbInfo {
             // Add padding for the *next* TcbLevelHeader
             let padding_added_for_next_tcb_level = append_padding_to_align(
                 &mut payload_bytes,
-                mem::align_of::<TcbLevelHeader>() // Align to 8
+                mem::align_of::<TcbLevelHeader>(), // Align to 8
             );
             current_payload_offset += padding_added_for_next_tcb_level;
         }

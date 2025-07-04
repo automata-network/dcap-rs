@@ -21,10 +21,17 @@ impl ZeroCopyError {
 impl core::fmt::Display for ZeroCopyError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ZeroCopyError::InvalidSliceLength => write!(f, "Invalid slice length encountered during zero-copy parsing"),
-            ZeroCopyError::InvalidOffset => write!(f, "Invalid offset calculated during zero-copy parsing"),
+            ZeroCopyError::InvalidSliceLength => write!(
+                f,
+                "Invalid slice length encountered during zero-copy parsing"
+            ),
+            ZeroCopyError::InvalidOffset => {
+                write!(f, "Invalid offset calculated during zero-copy parsing")
+            },
             ZeroCopyError::InvalidEnumValue => write!(f, "Invalid enum value encountered"),
-            ZeroCopyError::InvalidUtf8 => write!(f, "Invalid UTF-8 sequence encountered in string data"),
+            ZeroCopyError::InvalidUtf8 => {
+                write!(f, "Invalid UTF-8 sequence encountered in string data")
+            },
             ZeroCopyError::BytemuckError(e) => write!(f, "Bytemuck PodCastError: {:?}", e),
         }
     }

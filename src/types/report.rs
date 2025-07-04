@@ -175,8 +175,7 @@ pub struct Td15ReportBody {
     pub tee_tcb_svn2: [u8; 16],
 
     /// (600) Measurement of the initial contents of the Migration TD
-    pub mr_service_td: [u8; 48]
-    // Total 648 bytes
+    pub mr_service_td: [u8; 48], // Total 648 bytes
 }
 
 impl TryFrom<[u8; std::mem::size_of::<Td15ReportBody>()]> for Td15ReportBody {

@@ -151,7 +151,7 @@ impl EnclaveIdentity {
         self.tcb_levels
             .iter()
             .find(|level| level.tcb.isvsvn <= isv_svn)
-            .map(|level| level.tcb_status.clone())
+            .map(|level| level.tcb_status)
             .unwrap_or(QeTcbStatus::Unspecified)
     }
 
