@@ -205,6 +205,7 @@ impl TcbInfo {
         pre_image.extend_from_slice(&[self.tcb_type]);
         pre_image.extend_from_slice(&[id]);
         pre_image.extend_from_slice(&u32::from(self.version).to_be_bytes());
+        pre_image.extend_from_slice(&self.tcb_evaluation_data_number.to_be_bytes());
         pre_image.extend_from_slice(&self.fmspc_bytes());
         pre_image.extend_from_slice(&self.pce_id_bytes());
         pre_image.extend_from_slice(serde_json::to_vec(&self.tcb_levels)?.as_slice());
