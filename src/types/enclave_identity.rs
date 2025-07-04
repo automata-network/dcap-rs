@@ -1,9 +1,11 @@
-use anyhow::Context;
+use anyhow::{Context, Result};
 use chrono::Utc;
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
+
 use super::tcb_info::TcbStatus;
+use crate::utils::keccak;
 
 const ENCLAVE_IDENTITY_V2: u32 = 2;
 
@@ -54,7 +56,8 @@ impl QuotingEnclaveIdentityAndSignature {
     }
 
     pub fn get_enclave_identity(&self) -> anyhow::Result<EnclaveIdentity> {
-        serde_json::from_str(self.enclave_identity_raw.get()).context("Failed to deserialize enclave identity")
+        serde_json::from_str(self.enclave_identity_raw.get())
+            .context("Failed to deserialize enclave identity")
     }
 
     pub fn get_signature_bytes(&self) -> Vec<u8> {
@@ -73,12 +76,10 @@ pub struct EnclaveIdentity {
 
     /// The time the Enclave Identity Information was created. The time shalle be in UTC
     /// and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
-   
     pub issue_date: chrono::DateTime<Utc>,
 
     /// The time by which next Enclave Identity information will be issued. The time shall be in UTC
     /// and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
-   
     pub next_update: chrono::DateTime<Utc>,
 
     /// A monotonically increasing sequence number changed when Intel updates the content of the TCB evaluation data set:
@@ -86,7 +87,7 @@ pub struct EnclaveIdentity {
     /// flavours of SGX CPUs (Family-Model-Stepping-Platform-CustomSKU) and QE/QVE Identity.
     /// This sequence number allows users to easily determine when a particular TCB Info/QE Identity/QVE Identity
     /// superseedes another TCB Info/QE Identity/QVE Identity (value: current TCB Recovery event number stored in the database).
-    pub tcb_evaluation_data_number: u16,
+    pub tcb_evaluation_data_number: u32,
 
     /// Base 16-encoded string representing miscselect "golden" value (upon applying mask).
     pub miscselect: String,
@@ -153,6 +154,21 @@ impl EnclaveIdentity {
             .map(|level| level.tcb_status.clone())
             .unwrap_or(QeTcbStatus::Unspecified)
     }
+
+    pub fn get_content_hash(&self) -> Result<[u8; 32]> {
+        let mut pre_image: Vec<u8> = vec![];
+        pre_image.extend_from_slice(&[u8::from(self.id)]);
+        pre_image.extend_from_slice(&self.version.to_be_bytes());
+        pre_image.extend_from_slice(&self.tcb_evaluation_data_number.to_be_bytes());
+        pre_image.extend_from_slice(&self.miscselect_bytes());
+        pre_image.extend_from_slice(&self.miscselect_mask_bytes());
+        pre_image.extend_from_slice(&self.attributes_bytes());
+        pre_image.extend_from_slice(&self.attributes_mask_bytes());
+        pre_image.extend_from_slice(&self.mrsigner_bytes());
+        pre_image.extend_from_slice(&self.isvprodid.to_be_bytes());
+        pre_image.extend_from_slice(serde_json::to_vec(&self.tcb_levels)?.as_slice());
+        Ok(keccak::hash(&pre_image))
+    }
 }
 
 /// Enclave TCB level
@@ -162,7 +178,6 @@ pub struct QeTcbLevel {
     /// SGX Enclave's ISV SVN
     pub tcb: QeTcb,
     /// The time the TCB was evaluated. The time shall be in UTC and the encoding shall be compliant to ISO 8601 standard (YYYY-MM-DDhh:mm:ssZ)
-   
     pub tcb_date: chrono::DateTime<Utc>,
     /// TCB level status
     pub tcb_status: QeTcbStatus,
@@ -172,7 +187,7 @@ pub struct QeTcbLevel {
 }
 
 /// TCB level status
-#[derive(Deserialize, Serialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, Eq, PartialEq)]
 #[repr(u8)]
 pub enum QeTcbStatus {
     UpToDate,
@@ -192,7 +207,9 @@ impl std::fmt::Display for QeTcbStatus {
             QeTcbStatus::OutOfDate => write!(f, "OutOfDate"),
             QeTcbStatus::Revoked => write!(f, "Revoked"),
             QeTcbStatus::ConfigurationNeeded => write!(f, "ConfigurationNeeded"),
-            QeTcbStatus::ConfigurationAndSWHardeningNeeded => write!(f, "ConfigurationAndSWHardeningNeeded"),
+            QeTcbStatus::ConfigurationAndSWHardeningNeeded => {
+                write!(f, "ConfigurationAndSWHardeningNeeded")
+            },
             QeTcbStatus::SWHardeningNeeded => write!(f, "SWHardeningNeeded"),
             QeTcbStatus::OutOfDateConfigurationNeeded => write!(f, "OutOfDateConfigurationNeeded"),
             QeTcbStatus::Unspecified => write!(f, "Unspecified"),
@@ -307,10 +324,12 @@ mod tests {
     #[test]
     fn test_enclave_identity_serialization() {
         let qe_identity = include_bytes!("../../data/qeidentityv2_apiv4.json");
-        let qe_identity: QuotingEnclaveIdentityAndSignature = serde_json::from_slice(qe_identity).unwrap();
+        let qe_identity: QuotingEnclaveIdentityAndSignature =
+            serde_json::from_slice(qe_identity).unwrap();
         let qe_identity_parsed = qe_identity.get_enclave_identity().unwrap();
 
-        let original_qe_identity_hash = Sha256::digest(qe_identity.enclave_identity_raw.get().as_bytes());
+        let original_qe_identity_hash =
+            Sha256::digest(qe_identity.enclave_identity_raw.get().as_bytes());
 
         let serialized_qe_identity = serde_json::to_string(&qe_identity_parsed).unwrap();
         let serialized_qe_identity_hash = Sha256::digest(serialized_qe_identity.as_bytes());

@@ -1,6 +1,17 @@
 use std::time::SystemTime;
-
 use x509_cert::{certificate::CertificateInner, crl::CertificateList};
+
+pub mod keccak {
+    use tiny_keccak::{Hasher, Keccak};
+
+    pub fn hash(data: &[u8]) -> [u8; 32] {
+        let mut hasher = Keccak::v256();
+        let mut output = [0u8; 32];
+        hasher.update(data);
+        hasher.finalize(&mut output);
+        output
+    }
+}
 
 /// A module for serializing and deserializing certificate chains.
 pub mod cert_chain {
@@ -64,7 +75,7 @@ pub mod u32_hex {
     use serde::Serializer;
     use zerocopy::AsBytes;
 
-    use crate::types::UInt32LE;
+    type UInt32LE = zerocopy::little_endian::U32;
 
     pub fn deserialize<'de, D>(deserializer: D) -> std::result::Result<UInt32LE, D::Error>
     where

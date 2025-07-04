@@ -1,4 +1,3 @@
-use super::{QUOTE_V3, QUOTE_V4};
 use anyhow::anyhow;
 use zerocopy::little_endian;
 
@@ -6,7 +5,7 @@ pub const INTEL_QE_VENDOR_ID: [u8; 16] = [
     0x93, 0x9A, 0x72, 0x33, 0xF7, 0x9C, 0x4C, 0xA9, 0x94, 0x0A, 0x0D, 0xB3, 0x95, 0x7F, 0x06, 0x07,
 ];
 
-/// Header of the SGX Quote data structure.
+/// Header of the DCAP Quote data structure.
 ///
 /// We use zerocopy for zero-copy parsing of the quote header from raw bytes.
 /// This allows us to safely interpret the raw byte slice as a structured type without copying the data.
@@ -64,8 +63,8 @@ impl TryFrom<[u8; std::mem::size_of::<QuoteHeader>()]> for QuoteHeader {
         let quote_header =
             <Self as zerocopy::FromBytes>::read_from(&value).expect("failed to read quote header");
 
-        if quote_header.version.get() != QUOTE_V3 && quote_header.version.get() != QUOTE_V4 {
-            return Err(anyhow!("unsupported quote version"));
+        if quote_header.version.get() < 3 || quote_header.version.get() > 5 {
+            return Err(anyhow!("unsupported quote version: {}", quote_header.version));
         }
 
         if quote_header.attestation_key_type.get() != AttestationKeyType::Ecdsa256P256 as u16 {

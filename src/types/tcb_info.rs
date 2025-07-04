@@ -1,13 +1,19 @@
 use std::{str::from_utf8, time::SystemTime};
 
-use anyhow::{Context, bail};
+use anyhow::{Result, Context, bail};
 use chrono::{DateTime, Utc};
 use p256::ecdsa::VerifyingKey;
 use p256::ecdsa::signature::Verifier;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
-use super::{quote::{Quote, QuoteBody}, report::Td10ReportBody, sgx_x509::SgxPckExtension};
+use crate::types::{quote::TDX_TEE_TYPE, report::Td10ReportBody};
+use crate::utils::keccak;
+
+use super::{
+    quote::{Quote, QuoteBody},
+    sgx_x509::SgxPckExtension,
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TcbInfoAndSignature {
@@ -105,9 +111,9 @@ pub struct TcbInfo {
     #[serde(skip_serializing_if = "Option::is_none", rename = "id")]
     pub id: Option<String>,
     pub version: TcbInfoVersion,
-    
+
     pub issue_date: chrono::DateTime<Utc>,
-    
+
     pub next_update: chrono::DateTime<Utc>,
     pub fmspc: String,
     pub pce_id: String,
@@ -133,68 +139,6 @@ impl TcbInfo {
             .unwrap()
             .try_into()
             .unwrap()
-    }
-
-    pub fn verify_tdx_module(&self, quote_body: &Td10ReportBody) -> anyhow::Result<TcbStatus> {
-        if self.tdx_module.is_none() {
-            return Err(anyhow::anyhow!("no tdx module found in tcb info"));
-        }
-
-        let (tdx_module_isv_svn, tdx_module_version) =
-            (quote_body.tee_tcb_svn[0], quote_body.tee_tcb_svn[1]);
-        let tdx_module_identity_id = format!("TDX_{:02x}", tdx_module_version);
-
-        if self.tdx_module_identities.is_none() {
-            return Err(anyhow::anyhow!(
-                "no tdx module identities found in tcb info"
-            ));
-        }
-
-        let tdx_module_identity = self
-            .tdx_module_identities
-            .as_ref()
-            .unwrap()
-            .iter()
-            .find(|identity| identity.id == tdx_module_identity_id)
-            .ok_or(anyhow::anyhow!("tdx module identity not found in tcb info"))?;
-
-        // Get the TDX module reference based on version
-        let (mrsigner, attributes) = if tdx_module_version > 0 {
-            (
-                &tdx_module_identity.mrsigner,
-                &tdx_module_identity.attributes,
-            )
-        } else {
-            let tdx_module = self.tdx_module.as_ref().unwrap();
-            (&tdx_module.mrsigner, &tdx_module.attributes)
-        };
-
-        // Convert mrsigner and attributes to the appropriate type
-        let mrsigner_bytes: [u8; 48] = hex::decode(mrsigner).unwrap().try_into().unwrap();
-        let attributes_bytes: [u8; 8] = hex::decode(attributes).unwrap().try_into().unwrap();
-
-        // Check for mismatches with a single validation
-        if mrsigner_bytes != quote_body.mr_signer_seam {
-            return Err(anyhow::anyhow!(
-                "mrsigner mismatch between tdx module identity and tdx quote body"
-            ));
-        }
-
-        if attributes_bytes != quote_body.seam_attributes {
-            return Err(anyhow::anyhow!(
-                "attributes mismatch between tdx module identity and tdx quote body"
-            ));
-        }
-
-        let tcb_level = tdx_module_identity
-            .tcb_levels
-            .iter()
-            .find(|level| level.in_tcb_level(tdx_module_isv_svn))
-            .ok_or(anyhow::anyhow!(
-                "no tcb level found for tdx module identity within tdx module levels"
-            ))?;
-
-        Ok(tcb_level.tcb_status)
     }
 
     pub fn converge_tcb_status_with_tdx_module(
@@ -242,13 +186,47 @@ impl TcbInfo {
             _ => platform_status,
         }
     }
+
+    pub fn get_content_hash(&self) -> Result<[u8; 32]> {
+        let id: u8 = match &self.id {
+            Some(id) => {
+                if id == "SGX" {
+                    0
+                } else if id == "TDX" {
+                    1
+                } else {
+                    panic!("Unsupported TCB Info ID: {}", id);
+                }
+            },
+            None => 0,
+        };
+
+        let mut pre_image: Vec<u8> = vec![];
+        pre_image.extend_from_slice(&[self.tcb_type]);
+        pre_image.extend_from_slice(&[id]);
+        pre_image.extend_from_slice(&u32::from(self.version).to_be_bytes());
+        pre_image.extend_from_slice(&self.tcb_evaluation_data_number.to_be_bytes());
+        pre_image.extend_from_slice(&self.fmspc_bytes());
+        pre_image.extend_from_slice(&self.pce_id_bytes());
+        pre_image.extend_from_slice(serde_json::to_vec(&self.tcb_levels)?.as_slice());
+
+        if let Some(tdx_module) = &self.tdx_module {
+            pre_image.extend_from_slice(&serde_json::to_vec(tdx_module)?);
+        }
+
+        if let Some(tdx_module_identities) = &self.tdx_module_identities {
+            pre_image.extend_from_slice(&serde_json::to_vec(tdx_module_identities)?);
+        }
+
+        Ok(keccak::hash(&pre_image))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TcbLevel {
     pub tcb: Tcb,
-    
+
     pub tcb_date: chrono::DateTime<Utc>,
     pub tcb_status: TcbStatus,
     #[serde(rename = "advisoryIDs", skip_serializing_if = "Option::is_none")]
@@ -267,21 +245,8 @@ pub enum TcbStatus {
     OutOfDateConfigurationNeeded,
     Revoked,
     Unspecified,
-}
-
-impl std::fmt::Display for TcbStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TcbStatus::UpToDate => write!(f, "UpToDate"),
-            TcbStatus::OutOfDate => write!(f, "OutOfDate"),
-            TcbStatus::ConfigurationNeeded => write!(f, "ConfigurationNeeded"),
-            TcbStatus::SWHardeningNeeded => write!(f, "SWHardeningNeeded"),
-            TcbStatus::ConfigurationAndSWHardeningNeeded => write!(f, "ConfigurationAndSWHardeningNeeded"),
-            TcbStatus::OutOfDateConfigurationNeeded => write!(f, "OutOfDateConfigurationNeeded"),
-            TcbStatus::Revoked => write!(f, "Revoked"),
-            TcbStatus::Unspecified => write!(f, "Unspecified"),
-        }
-    }
+    RelaunchAdvised,
+    RelaunchAdvisedConfigurationNeeded,
 }
 
 impl TryFrom<u8> for TcbStatus {
@@ -296,6 +261,8 @@ impl TryFrom<u8> for TcbStatus {
             5 => Ok(TcbStatus::OutOfDateConfigurationNeeded),
             6 => Ok(TcbStatus::Revoked),
             7 => Ok(TcbStatus::Unspecified),
+            8 => Ok(TcbStatus::RelaunchAdvised),
+            9 => Ok(TcbStatus::RelaunchAdvisedConfigurationNeeded),
             _ => Err("Unsupported TCB status"),
         }
     }
@@ -338,9 +305,8 @@ pub struct TcbComponentV3 {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "type")]
-    pub component_type: Option<String>
+    pub component_type: Option<String>,
 }
-
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 pub struct TcbV2 {
@@ -404,15 +370,13 @@ impl Tcb {
     pub fn tdx_tcb_components(&self) -> Option<[u8; 16]> {
         match self {
             Self::V2(_) => None,
-            Self::V3(v3) => {
-                v3.tdxtcbcomponents.as_ref().map(|components| {
-                    let mut result = [0u8; 16];
-                    for i in 0..16 {
-                        result[i] = components[i].svn;
-                    }
-                    result
-                })
-            },
+            Self::V3(v3) => v3.tdxtcbcomponents.as_ref().map(|components| {
+                let mut result = [0u8; 16];
+                for i in 0..16 {
+                    result[i] = components[i].svn;
+                }
+                result
+            }),
         }
     }
 }
@@ -488,7 +452,7 @@ impl TdxModuleIdentity {
 #[serde(rename_all = "camelCase")]
 pub struct TdxTcbLevel {
     pub tcb: TcbTdx,
-    
+
     pub tcb_date: chrono::DateTime<Utc>,
     pub tcb_status: TcbStatus,
     #[serde(rename = "advisoryIDs", skip_serializing_if = "Option::is_none")]
@@ -507,7 +471,6 @@ pub struct TcbTdx {
 }
 
 impl TcbStatus {
-
     /// Determine the status of the TCB level that is trustable for the platform
     ///
     /// This function performs TCB (Trusted Computing Base) level verification by:
@@ -530,54 +493,79 @@ impl TcbStatus {
             .tcb_levels
             .iter()
             .enumerate()
-            .find(|(_, level)| TcbStatus::pck_in_tcb_level(level, pck_extension))
+            .find(|(_, level)| pck_in_tcb_level(level, pck_extension))
             .ok_or_else(|| anyhow::anyhow!("unsupported TCB in pck extension"))?;
 
         // Extract the SGX TCB status and advisories from the matching level
         let sgx_tcb_status = first_matching_level.tcb_status;
-        let mut advisory_ids = first_matching_level.advisory_ids.clone().unwrap_or_default();
+        let mut advisory_ids = first_matching_level
+            .advisory_ids
+            .clone()
+            .unwrap_or_default();
 
         // Default TDX TCB status to Unspecified
         // Will be updated if a valid TDX module is found in the quote
         let mut tdx_tcb_status = TcbStatus::Unspecified;
 
-        // Check if the quote contains a TDX module (TD 1.0 Quote Body)
-        if let QuoteBody::Td10QuoteBody(body) = &quote.body {
-            // Start iterating from the found sgx matching level
-            for level in &tcb_info.tcb_levels[index..] {
-                // Process each level starting from the matching one
-                if let Some(tdx_tcb_components) = level.tcb.tdx_tcb_components() {
-                    let components_match = tdx_tcb_components
-                        .iter()
-                        .zip(body.tee_tcb_svn.iter())
-                        .all(|(&comp, &svn)| comp <= svn);
+        if quote.header.tee_type == TDX_TEE_TYPE {
+            let td_report = match &quote.body {
+                QuoteBody::Td10QuoteBody(report) => report,
+                QuoteBody::Td15QuoteBody(report) => &report.td_report,
+                _ => bail!("TDX Quote should only contain Td10 or Td15 report"),
+            };
 
-                    if components_match {
-                        tdx_tcb_status = level.tcb_status;
-                        advisory_ids = level.advisory_ids.clone().unwrap_or_default();
-                        break;
-                    }
-                } else {
-                    // This should not happen, meaning if you have a Td10QuoteBody, you should have a TDX TCB Component present in the TCB Info
-                    return Err(anyhow::anyhow!("did not find tdx tcb components in tcb info when Td10QuoteBody is provided for the quote"));
-                }
-            }
+            let matched_tcb_level = match_tdx_tcb(td_report, tcb_info, index)?;
+            tdx_tcb_status = matched_tcb_level.tcb_status;
+            advisory_ids = matched_tcb_level.advisory_ids.clone().unwrap_or_default();
         }
 
         // Return the final status determination as a tuple
         Ok((sgx_tcb_status, tdx_tcb_status, advisory_ids))
     }
+}
 
-    /// Returns true if all the pck componenets are >= all the tcb level components and e
-    /// the pck pcesvn is >= the tcb level pcesvn.
-    fn pck_in_tcb_level(level: &TcbLevel, pck_extension: &SgxPckExtension) -> bool {
-        const SVN_LENGTH: usize = 16;
-        let pck_components: &[u8; SVN_LENGTH] = &pck_extension.tcb.compsvn;
+/// Returns true if all the pck componenets are >= all the tcb level components and
+/// the pck pcesvn is >= the tcb level pcesvn.
+fn pck_in_tcb_level(level: &TcbLevel, pck_extension: &SgxPckExtension) -> bool {
+    const SVN_LENGTH: usize = 16;
+    let pck_components: &[u8; SVN_LENGTH] = &pck_extension.tcb.compsvn;
 
-        pck_components
-            .iter()
-            .zip(level.tcb.sgx_tcb_components())
-            .all(|(&pck, tcb)| pck >= tcb)
-            && pck_extension.tcb.pcesvn >= level.tcb.pcesvn()
+    pck_components
+        .iter()
+        .zip(level.tcb.sgx_tcb_components())
+        .all(|(&pck, tcb)| pck >= tcb)
+        && pck_extension.tcb.pcesvn >= level.tcb.pcesvn()
+}
+
+fn match_tdx_tcb(
+    td_report: &Td10ReportBody,
+    tcb_info: &TcbInfo,
+    index: usize,
+) -> anyhow::Result<TcbLevel> {
+    let matching_level: TcbLevel;
+
+    // Start iterating from the found sgx matching level
+    for level in &tcb_info.tcb_levels[index..] {
+        // Process each level starting from the matching one
+        if let Some(tdx_tcb_components) = level.tcb.tdx_tcb_components() {
+            let components_match = tdx_tcb_components
+                .iter()
+                .zip(td_report.tee_tcb_svn.iter())
+                .all(|(&comp, &svn)| comp <= svn);
+
+            if components_match {
+                // tdx_tcb_status = level.tcb_status;
+                // advisory_ids = level.advisory_ids.clone().unwrap_or_default();
+                matching_level = level.clone();
+                return Ok(matching_level);
+            }
+        } else {
+            // This should not happen, meaning if you have a Td10QuoteBody, you should have a TDX TCB Component present in the TCB Info
+            break;
+        }
     }
+
+    Err(anyhow::anyhow!(
+        "can not find tdx tcb components in tcb info for TDX Quote Body"
+    ))
 }

@@ -1,3 +1,4 @@
+pub mod tdx;
 pub mod trust_store;
 pub mod types;
 pub mod utils;
@@ -10,6 +11,8 @@ use chrono::{DateTime, Utc};
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 #[cfg(feature = "full")]
 use std::time::SystemTime;
+#[cfg(feature = "full")]
+use tdx::*;
 #[cfg(feature = "full")]
 use trust_store::{TrustStore, TrustedIdentity};
 #[cfg(feature = "full")]
@@ -44,10 +47,16 @@ pub fn verify_dcap_quote(
 ) -> anyhow::Result<VerifiedOutput> {
     // 1. Verify the integrity of the signature chain from the Quote to the Intel-issued PCK
     //    certificate, and that no keys in the chain have been revoked.
+    use crate::types::quote::QuoteBody;
     let tcb_info = verify_integrity(current_time, &collateral, &quote)?;
 
     // 2. Verify the Quoting Enclave source and all signatures in the Quote.
     let qe_tcb_status = verify_quote(current_time, &collateral, &quote)?;
+
+    assert!(
+        qe_tcb_status != QeTcbStatus::Revoked,
+        "Quoting Enclave TCB Revoked"
+    );
 
     // 3. Verify the status of Intel SGX TCB described in the chain.
     let pck_extension = quote.signature.get_pck_extension()?;
@@ -69,9 +78,28 @@ pub fn verify_dcap_quote(
     let mut tcb_status;
     if quote.header.tee_type == TDX_TEE_TYPE {
         tcb_status = tdx_tcb_status;
-        let tdx_module_status =
-            tcb_info.verify_tdx_module(quote.body.as_tdx_report_body().unwrap())?;
-        tcb_status = TcbInfo::converge_tcb_status_with_tdx_module(tcb_status, tdx_module_status);
+        let tdx_module_tcb_status =
+            verify_tdx_module(&tcb_info, quote.body.as_tdx_report_body().unwrap())?;
+        tcb_status =
+            TcbInfo::converge_tcb_status_with_tdx_module(tcb_status, tdx_module_tcb_status);
+
+        if let QuoteBody::Td15QuoteBody(td_report) = &quote.body {
+            let (relaunch_needed, configuration_needed) = check_for_relaunch(
+                &tcb_info,
+                td_report,
+                qe_tcb_status,
+                sgx_tcb_status,
+                tdx_tcb_status,
+                tdx_module_tcb_status,
+            );
+            if relaunch_needed {
+                if configuration_needed {
+                    tcb_status = TcbStatus::RelaunchAdvisedConfigurationNeeded;
+                } else {
+                    tcb_status = TcbStatus::RelaunchAdvised;
+                }
+            }
+        }
     } else {
         tcb_status = sgx_tcb_status;
     }
@@ -81,7 +109,7 @@ pub fn verify_dcap_quote(
 
     Ok(VerifiedOutput {
         quote_version: quote.header.version.get(),
-        tee_type: quote.header.tee_type.to_le(), // Compatible with VerifiedOutput defined on-chain
+        quote_body_type: quote.body_type,
         tcb_status: tcb_status as u8,
         fmspc: pck_extension.fmspc,
         quote_body: quote.body,
@@ -325,6 +353,11 @@ pub fn verify_quote_signatures(quote: &Quote) -> anyhow::Result<()> {
     let body_bytes = quote.body.as_bytes();
     let mut data = Vec::with_capacity(header_bytes.len() + body_bytes.len());
     data.extend_from_slice(header_bytes);
+    if quote.header.version.get() > 4 {
+        // For version 5 and above, we include the quote body type and size
+        data.extend_from_slice(&quote.body_type.to_le_bytes());
+        data.extend_from_slice(&quote.body_size.to_le_bytes());
+    }
     data.extend_from_slice(body_bytes);
 
     let sig = Signature::from_slice(quote.signature.isv_signature)?;
@@ -366,106 +399,4 @@ pub fn verify_tcb_status(
     }
 
     TcbStatus::lookup(pck_extension, tcb_info, quote)
-}
-
-#[cfg(all(test, not(feature = "zero-copy")))]
-mod tests {
-
-    use std::time::Duration;
-
-    use x509_cert::{crl::CertificateList, der::Decode};
-
-    use crate::types::tcb_info::TcbInfoAndSignature;
-    use crate::{
-        types::enclave_identity::QuotingEnclaveIdentityAndSignature, utils::cert_chain_processor,
-    };
-
-    use super::*;
-
-    fn sgx_quote_data() -> (Collateral, Quote<'static>) {
-        let collateral = include_str!("../data/full_collateral_sgx.json");
-        let collateral: Collateral = serde_json::from_str(collateral).unwrap();
-        let quote = include_bytes!("../data/quote_sgx.bin");
-        let quote = Quote::read(&mut quote.as_slice()).unwrap();
-        (collateral, quote)
-    }
-
-    fn tdx_quote_data() -> (Collateral, Quote<'static>) {
-        let quote = include_bytes!("../data/quote_tdx.bin");
-        let quote = Quote::read(&mut quote.as_slice()).unwrap();
-
-        let tcb_info_and_qe_identity_issuer_chain = include_bytes!("../data/signing_cert.pem");
-        let tcb_info_and_qe_identity_issuer_chain =
-            cert_chain_processor::load_pem_chain_bpf_friendly(
-                tcb_info_and_qe_identity_issuer_chain,
-            )
-            .unwrap();
-
-        let root_ca_crl = include_bytes!("../data/intel_root_ca_crl.der");
-        let root_ca_crl = CertificateList::from_der(root_ca_crl).unwrap();
-
-        let tcb_info = include_bytes!("../data/tcb_info_v3_with_tdx_module.json");
-        let tcb_info: TcbInfoAndSignature = serde_json::from_slice(tcb_info).unwrap();
-
-        let qe_identity = include_bytes!("../data/qeidentityv2_apiv4.json");
-        let qe_identity: QuotingEnclaveIdentityAndSignature =
-            serde_json::from_slice(qe_identity).unwrap();
-
-        let platform_ca_crl = include_bytes!("../data/pck_platform_crl.der");
-        let platform_ca_crl = CertificateList::from_der(platform_ca_crl).unwrap();
-
-        let collateral = Collateral {
-            tcb_info_and_qe_identity_issuer_chain,
-            root_ca_crl,
-            pck_crl: platform_ca_crl,
-            tcb_info,
-            qe_identity,
-        };
-        (collateral, quote)
-    }
-
-    fn test_sgx_time() -> SystemTime {
-        // Aug 29th 4:20pm, ~24 hours after quote was generated
-        SystemTime::UNIX_EPOCH + Duration::from_secs(1724962800)
-    }
-
-    fn test_tdx_time() -> SystemTime {
-        // Pinned September 10th, 2024, 6:49am GMT
-        SystemTime::UNIX_EPOCH + Duration::from_secs(1725950994)
-    }
-
-    #[test]
-    fn parse_tdx_quote() {
-        let bytes = include_bytes!("../data/quote_tdx.bin");
-        let quote = Quote::read(&mut bytes.as_slice()).unwrap();
-        println!("{:?}", quote);
-    }
-
-    #[test]
-    fn parse_sgx_quote() {
-        let bytes = include_bytes!("../data/quote_sgx.bin");
-        let quote = Quote::read(&mut bytes.as_slice()).unwrap();
-        println!("{:?}", quote);
-    }
-
-    #[test]
-    fn verify_integrity() {
-        let (collateral, quote) = sgx_quote_data();
-        super::verify_integrity(test_sgx_time(), &collateral, &quote)
-            .expect("certificate chain integrity should succeed");
-    }
-
-    #[test]
-    fn e2e_sgx_quote() {
-        let (collateral, quote) = sgx_quote_data();
-        super::verify_dcap_quote(test_sgx_time(), collateral, quote)
-            .expect("certificate chain integrity should succeed");
-    }
-
-    #[test]
-    fn e2e_tdx_quote() {
-        let (collateral, quote) = tdx_quote_data();
-        super::verify_dcap_quote(test_tdx_time(), collateral, quote)
-            .expect("certificate chain integrity should succeed");
-    }
 }

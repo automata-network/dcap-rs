@@ -50,7 +50,7 @@ impl<'a> EnclaveIdentityZeroCopy<'a> {
     pub fn version(&self) -> u32 { self.header.version }
     pub fn issue_date_timestamp(&self) -> i64 { self.header.issue_date_timestamp }
     pub fn next_update_timestamp(&self) -> i64 { self.header.next_update_timestamp }
-    pub fn tcb_evaluation_data_number(&self) -> u16 { self.header.tcb_evaluation_data_number }
+    pub fn tcb_evaluation_data_number(&self) -> u32 { self.header.tcb_evaluation_data_number }
     pub fn isvprodid(&self) -> u16 { self.header.isvprodid }
     pub fn miscselect_bytes(&self) -> [u8; 4] { 
         hex::decode(&self.header.miscselect_hex)

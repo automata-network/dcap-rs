@@ -38,14 +38,15 @@ pub struct EnclaveIdentityHeader {
     pub version: u32,
     pub issue_date_timestamp: i64,
     pub next_update_timestamp: i64,
-    pub tcb_evaluation_data_number: u16,
+    pub tcb_evaluation_data_number: u32,
     pub isvprodid: u16,
+    pub _final_padding: [u8; 2],
     // Hex strings (fixed-size byte arrays storing UTF-8 hex characters)
     pub miscselect_hex: [u8; 8],
     pub miscselect_mask_hex: [u8; 8],
     pub attributes_hex: [u8; 32],
     pub attributes_mask_hex: [u8; 32],
-    pub mrsigner_hex: [u8; 64], // 64 hex chars for a 32-byte value
+    pub mrsigner_hex: [u8; 64],
     
     pub tcb_levels_count: u32,
     pub tcb_levels_total_payload_len: u32, // Total byte length for all QeTcbLevelPodHeader sections + their payloads
@@ -55,7 +56,8 @@ pub struct EnclaveIdentityHeader {
     // version (4) = 4
     // issue_date (8) = 8
     // next_update (8) = 8
-    // tcb_eval_num (2) + isvprodid (2) = 4
+    // tcb_eval_num (4) = 4
+    // isvprodid (2) + _final_padding (2) = 4
     // miscselect (8) = 8
     // miscselect_mask (8) = 8
     // attributes (32) = 32
@@ -63,8 +65,8 @@ pub struct EnclaveIdentityHeader {
     // mrsigner (64) = 64
     // tcb_levels_count (4) = 4
     // tcb_levels_total_payload_len (4) = 4
-    // Total = 4+4+8+8+4+8+8+32+32+64+4+4 = 180. Needs to be 184 for multiple of 8.
-    pub _final_padding: [u8; 4],
+    // Total = 4+4+8+8+4+4+8+8+32+32+64+4+4 = 184
+    
 }
 
 /// The top-level POD structure for Enclave Identity and its signature.

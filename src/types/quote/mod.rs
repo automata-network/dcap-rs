@@ -11,12 +11,7 @@ pub use signature::*;
 
 use crate::utils;
 
-use super::report::{EnclaveReportBody, Td10ReportBody};
-
-#[allow(non_snake_case)]
-const QUOTE_V3: u16 = 3;
-#[allow(non_snake_case)]
-const QUOTE_V4: u16 = 4;
+use super::report::*;
 
 pub const SGX_TEE_TYPE: u32 = 0x00000000;
 pub const TDX_TEE_TYPE: u32 = 0x00000081;
@@ -24,13 +19,10 @@ pub const TDX_TEE_TYPE: u32 = 0x00000081;
 /// A DCAP quote, used for verification.
 #[derive(Debug)]
 pub struct Quote<'a> {
-    /// Header of the SGX Quote data structure.
     pub header: QuoteHeader,
-
-    /// Software Vendor enclave report.
+    pub body_type: u16,
+    pub body_size: u32,
     pub body: QuoteBody,
-
-    /// Signature of the quote body.
     pub signature: QuoteSignatureData<'a>,
 }
 
@@ -45,27 +37,75 @@ impl<'a> Quote<'a> {
             .ok_or_else(|| anyhow!("underflow reading quote header"))?;
 
         // Read the quote body and signature
-        if quote_header.tee_type == SGX_TEE_TYPE {
-            let quote_body = utils::read_from_bytes::<EnclaveReportBody>(bytes)
-                .ok_or_else(|| anyhow!("underflow reading enclave report body"))?;
-            let quote_signature = QuoteSignatureData::read(bytes, quote_header.version.get())?;
-            Ok(Quote {
-                header: quote_header,
-                body: QuoteBody::SgxQuoteBody(quote_body),
-                signature: quote_signature,
-            })
-        } else if quote_header.tee_type == TDX_TEE_TYPE {
-            let quote_body = utils::read_from_bytes::<Td10ReportBody>(bytes)
-                .ok_or_else(|| anyhow!("underflow reading td10 report body"))?;
-            let quote_signature = QuoteSignatureData::read(bytes, quote_header.version.get())?;
-
-            return Ok(Quote {
-                header: quote_header,
-                body: QuoteBody::Td10QuoteBody(quote_body),
-                signature: quote_signature,
-            });
+        let quote_body_type;
+        let quote_body_size;
+        let quote_body = if quote_header.version.get() <= 4 {
+            if quote_header.tee_type == SGX_TEE_TYPE {
+                quote_body_type = 1;
+                quote_body_size = std::mem::size_of::<EnclaveReportBody>() as u32;
+                let isv_report_body = utils::read_from_bytes::<EnclaveReportBody>(bytes)
+                    .ok_or_else(|| anyhow!("underflow reading enclave report body"))?;
+                QuoteBody::SgxQuoteBody(isv_report_body)
+            } else if quote_header.tee_type == TDX_TEE_TYPE {
+                quote_body_type = 2;
+                quote_body_size = std::mem::size_of::<Td10ReportBody>() as u32;
+                let td_report = utils::read_from_bytes::<Td10ReportBody>(bytes)
+                    .ok_or_else(|| anyhow!("underflow reading td10 report body"))?;
+                QuoteBody::Td10QuoteBody(td_report)
+            } else {
+                return Err(anyhow!("unsupported TEE type"));
+            }
         } else {
-            return Err(anyhow!("unsupported quote version"));
-        }
+            quote_body_type = u16::from_le_bytes([bytes[0], bytes[1]]);
+            *bytes = &bytes[2..];
+
+            quote_body_size = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            *bytes = &bytes[4..];
+
+            if quote_body_type == 1 {
+                if quote_header.tee_type != SGX_TEE_TYPE {
+                    return Err(anyhow!("Quote body type 1 must be SGX TEE type"));
+                }
+                if quote_body_size as usize != std::mem::size_of::<EnclaveReportBody>() {
+                    return Err(anyhow!("Quote body size mismatch for SGX TEE type"));
+                }
+                let isv_report_body = utils::read_from_bytes::<EnclaveReportBody>(bytes)
+                    .ok_or_else(|| anyhow!("underflow reading enclave report body"))?;
+                QuoteBody::SgxQuoteBody(isv_report_body)
+            } else if quote_body_type == 2 {
+                if quote_header.tee_type != TDX_TEE_TYPE {
+                    return Err(anyhow!("Quote body type 2 must be TDX TEE type"));
+                }
+                if quote_body_size as usize != std::mem::size_of::<Td10ReportBody>() {
+                    return Err(anyhow!("Quote body size mismatch for TDX TEE type"));
+                }
+                let td_report = utils::read_from_bytes::<Td10ReportBody>(bytes)
+                    .ok_or_else(|| anyhow!("underflow reading td10 report body"))?;
+                QuoteBody::Td10QuoteBody(td_report)
+            } else if quote_body_type == 3 {
+                if quote_header.tee_type != TDX_TEE_TYPE {
+                    return Err(anyhow!("Quote body type 3 must be TDX TEE type"));
+                }
+                if quote_body_size as usize != std::mem::size_of::<Td15ReportBody>() {
+                    return Err(anyhow!("Quote body size mismatch for TDX TEE type"));
+                }
+                let td_report = utils::read_from_bytes::<Td15ReportBody>(bytes)
+                    .ok_or_else(|| anyhow!("underflow reading td15 report body"))?;
+                QuoteBody::Td15QuoteBody(td_report)
+            } else {
+                return Err(anyhow!("unsupported quote body type"));
+            }
+        };
+
+        // Read the quote signature
+        let quote_signature = QuoteSignatureData::read(bytes, quote_header.version.get())?;
+
+        Ok(Quote {
+            header: quote_header,
+            body_type: quote_body_type,
+            body_size: quote_body_size,
+            body: quote_body,
+            signature: quote_signature,
+        })
     }
 }
