@@ -63,6 +63,10 @@ impl TryFrom<[u8; std::mem::size_of::<QuoteHeader>()]> for QuoteHeader {
         let quote_header =
             <Self as zerocopy::FromBytes>::read_from(&value).expect("failed to read quote header");
 
+        if quote_header.version.get() < 3 || quote_header.version.get() > 5 {
+            return Err(anyhow!("unsupported quote version: {}", quote_header.version));
+        }
+
         if quote_header.attestation_key_type.get() != AttestationKeyType::Ecdsa256P256 as u16 {
             return Err(anyhow!("unsupported attestation key type"));
         }
