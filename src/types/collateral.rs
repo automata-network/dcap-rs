@@ -4,7 +4,6 @@ use crate::utils::keccak;
 use crate::utils::{cert_chain, crl};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-#[cfg(not(feature = "zero-copy"))]
 use x509_cert::certificate::CertificateInner;
 use x509_cert::{
     crl::CertificateList,
