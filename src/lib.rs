@@ -1,3 +1,4 @@
+#[cfg(feature = "full")]
 pub mod tdx;
 pub mod trust_store;
 pub mod types;
