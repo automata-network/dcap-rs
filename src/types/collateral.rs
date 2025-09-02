@@ -2,6 +2,7 @@
 use crate::utils::cert_chain_processor;
 use crate::utils::keccak;
 use crate::utils::{cert_chain, crl};
+use alloy_sol_types::{SolType, sol};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use x509_cert::certificate::CertificateInner;
@@ -11,6 +12,8 @@ use x509_cert::{
 };
 
 use super::{enclave_identity::QuotingEnclaveIdentityAndSignature, tcb_info::TcbInfoAndSignature};
+
+pub type CollateralSol = sol!((bytes, bytes, bytes[2], string, string));
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Collateral {
@@ -86,6 +89,60 @@ impl Collateral {
         let tbs = crl.tbs_cert_list.to_der()?;
         Ok(keccak::hash(&tbs))
     }
+
+    /// Encode the Collateral struct to Solidity ABI format
+    pub fn sol_abi_encode(&self) -> Result<Vec<u8>> {
+        // Convert CRLs to DER-encoding raw bytes for ABI encoding
+        let root_ca_crl_bytes = self.root_ca_crl.to_der()?;
+        let pck_crl_bytes = self.pck_crl.to_der()?;
+
+        // Encode certificate chain as ABI-encoded DER bytes array (of fixed size == 2)
+        let tcb_issuer_chain = &self.tcb_info_and_qe_identity_issuer_chain;
+        let mut chain_bytes: [Vec<u8>; 2] = [vec![], vec![]];
+        for (i, cert) in tcb_issuer_chain.iter().enumerate() {
+            let cert_der = cert.to_der()?;
+            chain_bytes[i] = cert_der;
+        }
+
+        // Serialize structured data to JSON strings
+        let tcb_info_json = serde_json::to_string(&self.tcb_info)?;
+        let qe_identity_json = serde_json::to_string(&self.qe_identity)?;
+
+        // Create tuple for ABI encoding: (bytes, bytes, bytes[2], string, string)
+        let encoded = CollateralSol::abi_encode_params(&(
+            root_ca_crl_bytes,
+            pck_crl_bytes,
+            chain_bytes,
+            tcb_info_json,
+            qe_identity_json,
+        ));
+        Ok(encoded)
+    }
+
+    /// Decode Solidity ABI encoded bytes back to Collateral struct
+    pub fn sol_abi_decode(encoded: &[u8]) -> Result<Self> {
+        use pem::{Pem, encode};
+
+        // Decode the ABI encoded tuple: (bytes, bytes, bytes, string, string)
+        let (root_ca_crl_bytes, pck_crl_bytes, chain_bytes, tcb_info_json, qe_identity_json) =
+            CollateralSol::abi_decode_params(encoded)?;
+
+        let mut pem_chain = String::new();
+        let tcb_pem = Pem::new(String::from("CERTIFICATE"), chain_bytes[0].to_vec().clone());
+
+        let root_pem = Pem::new(String::from("CERTIFICATE"), chain_bytes[1].to_vec().clone());
+
+        pem_chain.push_str(&encode(&tcb_pem));
+        pem_chain.push_str(&encode(&root_pem));
+
+        Ok(Self::new(
+            &root_ca_crl_bytes,
+            &pck_crl_bytes,
+            pem_chain.as_bytes(),
+            &tcb_info_json,
+            &qe_identity_json,
+        )?)
+    }
 }
 
 #[cfg(test)]
@@ -112,5 +169,51 @@ mod tests {
     fn test_decode_collateral_json() {
         let json = include_str!("../../data/full_collateral_sgx.json");
         let _collateral: Collateral = serde_json::from_str(json).expect("json to parse");
+    }
+
+    #[test]
+    fn test_abi_encode_collateral() {
+        let collateral = Collateral::new(
+            include_bytes!("../../data/intel_root_ca_crl.der"),
+            include_bytes!("../../data/pck_platform_crl.der"),
+            include_bytes!("../../data/tcb_signing_cert.pem"),
+            include_str!("../../data/tcb_info_v2.json"),
+            include_str!("../../data/qeidentityv2.json"),
+        )
+        .expect("collateral to be created");
+
+        let encoded = collateral.sol_abi_encode().expect("collateral to abi encode");
+        assert!(!encoded.is_empty(), "ABI encoded data should not be empty");
+
+        // Write encoded data to file for test_abi_decode_collateral to use
+        std::fs::create_dir_all("data/abi/").expect("failed to create directory");
+        std::fs::write("data/abi/encoded.bin", &encoded).expect("failed to write encoded data");
+
+        println!("ABI encoded length: {} bytes", encoded.len());
+    }
+
+    #[test]
+    fn test_abi_decode_collateral() {
+        // Read the encoded data written by test_abi_encode_collateral
+        let encoded = std::fs::read("data/abi/encoded.bin").expect("failed to read encoded data");
+        let decoded = Collateral::sol_abi_decode(&encoded).expect("collateral to abi decode");
+
+        // Create original collateral for comparison
+        let original = Collateral::new(
+            include_bytes!("../../data/intel_root_ca_crl.der"),
+            include_bytes!("../../data/pck_platform_crl.der"),
+            include_bytes!("../../data/tcb_signing_cert.pem"),
+            include_str!("../../data/tcb_info_v2.json"),
+            include_str!("../../data/qeidentityv2.json"),
+        )
+        .expect("collateral to be created");
+
+        // Verify the decoded data matches original
+        let original_json = serde_json::to_string(&original).expect("original to serialize");
+        let decoded_json = serde_json::to_string(&decoded).expect("decoded to serialize");
+        assert_eq!(
+            original_json, decoded_json,
+            "Decoded collateral should match original"
+        );
     }
 }

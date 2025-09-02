@@ -1,3 +1,8 @@
+// Re-exports
+
+// Re-export alloy_sol_types for abi-encoding
+pub use alloy_sol_types;
+
 #[cfg(feature = "full")]
 pub mod tdx;
 pub mod trust_store;
